@@ -8,8 +8,11 @@ import { ChatOpenAI } from '@langchain/openai';
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
-import { MAX_IMAGE_SIZE } from '../common/constants';
-import type { RecognitionResult, QuestionRegion } from '../types/region';
+import { MAX_IMAGE_SIZE } from '../../common/constants';
+import type {
+  RecognitionResult,
+  QuestionRegion,
+} from '../../common/types/region';
 
 @Injectable()
 export class QwenVLService {

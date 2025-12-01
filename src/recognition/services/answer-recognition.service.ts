@@ -12,8 +12,8 @@ import type {
   QuestionAnswer,
   AnswerRecognitionResponse,
   RegionAnswerResult,
-} from '../types/answer';
-import type { QuestionType, QuestionRegion } from '../types/region';
+} from '../../common/types/answer';
+import type { QuestionType, QuestionRegion } from '../../common/types/region';
 
 @Injectable()
 export class AnswerRecognitionService {
@@ -211,48 +211,39 @@ JSON 格式：
    * Build prompt for full image recognition (all question types)
    */
   private buildFullImagePrompt(): string {
-    return `请识别这张答题卡图片中的所有答案，包括选择题、填空题和解答题。
+    return `请识别这张标准答案图片中每道题的答案。
 
 要求：
-1. **选择题**：识别每道题选择的选项（A、B、C、D等），如果未作答返回空字符串
-2. **填空题**：识别每道题的填空内容，如果未作答返回空字符串
-3. **解答题**：识别每道题的解答内容（文字内容），如果未作答返回空字符串
-4. 返回 JSON 格式，按题目类型分组
+1. 识别所有题目的答案，包括选择题、填空题和解答题
+2. **选择题**：识别选择的选项（A、B、C、D等）
+3. **填空题**：识别填空的内容
+4. **解答题**：识别解答的文字内容
+5. 不需要关注题目在图片中的位置区域，只需要识别每道题的答案内容
+6. 返回 JSON 格式，包含所有题目的答案
 
 JSON 格式：
 \`\`\`json
 {
-  "regions": [
+  "questions": [
     {
+      "question_number": 1,
       "type": "choice",
-      "questions": [
-        {
-          "question_number": 1,
-          "answer": "A"
-        },
-        {
-          "question_number": 2,
-          "answer": "B"
-        }
-      ]
+      "answer": "A"
     },
     {
+      "question_number": 2,
+      "type": "choice",
+      "answer": "B"
+    },
+    {
+      "question_number": 3,
       "type": "fill",
-      "questions": [
-        {
-          "question_number": 1,
-          "answer": "答案内容"
-        }
-      ]
+      "answer": "答案内容"
     },
     {
+      "question_number": 4,
       "type": "essay",
-      "questions": [
-        {
-          "question_number": 1,
-          "answer": "解答内容..."
-        }
-      ]
+      "answer": "解答内容..."
     }
   ]
 }
@@ -275,43 +266,111 @@ JSON 格式：
     }
 
     try {
+      // Try new format first: { questions: [{ question_number, type, answer }] }
       const parsed = JSON.parse(jsonContent) as {
-        regions: Array<{
+        questions?: Array<{
+          question_number: number;
+          type?: QuestionType;
+          answer: string;
+        }>;
+        regions?: Array<{
           type: QuestionType;
           questions: QuestionAnswer[];
         }>;
       };
 
-      // Validate structure
-      if (!parsed.regions || !Array.isArray(parsed.regions)) {
-        throw new Error('Invalid response format: missing regions array');
+      // Support both new format (questions array) and legacy format (regions array)
+      if (parsed.questions && Array.isArray(parsed.questions)) {
+        // New format: group questions by type
+        const questionsByType = new Map<QuestionType, QuestionAnswer[]>();
+
+        parsed.questions.forEach((q) => {
+          // Validate question
+          if (
+            typeof q.question_number !== 'number' ||
+            typeof q.answer !== 'string'
+          ) {
+            return;
+          }
+
+          // Determine type: use provided type or infer from answer
+          let questionType: QuestionType = q.type || 'choice';
+          if (!q.type) {
+            // Infer type: if answer is single letter (A-D), likely choice
+            if (/^[A-D]$/i.test(q.answer.trim())) {
+              questionType = 'choice';
+            } else if (q.answer.length > 50) {
+              // Long answer likely essay
+              questionType = 'essay';
+            } else {
+              questionType = 'fill';
+            }
+          }
+
+          if (!questionsByType.has(questionType)) {
+            questionsByType.set(questionType, []);
+          }
+
+          questionsByType.get(questionType)!.push({
+            question_number: q.question_number,
+            answer: q.answer,
+          });
+        });
+
+        // Convert to RegionAnswerResult format
+        const regionResults: RegionAnswerResult[] = Array.from(
+          questionsByType.entries(),
+        ).map(([type, questions]) => ({
+          type,
+          region: {
+            type,
+            question_number: 1,
+            x_min_percent: 0,
+            y_min_percent: 0,
+            x_max_percent: 100,
+            y_max_percent: 100,
+          },
+          questions: questions.sort(
+            (a, b) => a.question_number - b.question_number,
+          ),
+        }));
+
+        return {
+          regions: regionResults,
+        };
       }
 
-      // Convert to RegionAnswerResult format
-      const regionResults: RegionAnswerResult[] = parsed.regions.map(
-        (region) => {
-          const validQuestions = region.questions.filter((question) => {
-            return this.validateQuestion(question);
-          });
+      // Legacy format: { regions: [{ type, questions: [...] }] }
+      if (parsed.regions && Array.isArray(parsed.regions)) {
+        const regionResults: RegionAnswerResult[] = parsed.regions.map(
+          (region) => {
+            const validQuestions = region.questions.filter((question) => {
+              return this.validateQuestion(question);
+            });
 
-          return {
-            type: region.type,
-            region: {
+            return {
               type: region.type,
-              question_number: 1,
-              x_min_percent: 0,
-              y_min_percent: 0,
-              x_max_percent: 100,
-              y_max_percent: 100,
-            },
-            questions: validQuestions,
-          };
-        },
-      );
+              region: {
+                type: region.type,
+                question_number: 1,
+                x_min_percent: 0,
+                y_min_percent: 0,
+                x_max_percent: 100,
+                y_max_percent: 100,
+              },
+              questions: validQuestions,
+            };
+          },
+        );
 
-      return {
-        regions: regionResults,
-      };
+        return {
+          regions: regionResults,
+        };
+      }
+
+      throw new Error(
+        'Invalid response format: missing questions or regions array',
+      );
     } catch (error) {
       this.logger.error('Failed to parse full image response', {
         error: error instanceof Error ? error.message : String(error),

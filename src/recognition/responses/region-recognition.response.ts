@@ -5,7 +5,7 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 
-import { QuestionRegion } from '../../types/region';
+import { QuestionRegion } from '../../common/types/region';
 
 export class QuestionRegionResponse implements QuestionRegion {
   @ApiProperty({ description: 'Question type', example: 'choice' })

@@ -3,9 +3,13 @@
  * 使用 LangChain 调用 Qwen3-VL-235B-A22B 模型进行试卷区域分割
  */
 
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage } from '@langchain/core/messages';
-import type { RecognitionResult, QuestionRegion } from '../types/region.js';
+import { ChatOpenAI } from '@langchain/openai';
+
+import type {
+  RecognitionResult,
+  QuestionRegion,
+} from '../common/types/region.js';
 
 /**
  * Qwen VL Service Configuration
@@ -178,7 +182,9 @@ JSON 格式如下：
     } catch (error) {
       console.error('Failed to parse model response:', error);
       console.error('Raw content:', content);
-      throw new Error(`Failed to parse model response: ${error instanceof Error ? error.message : String(error)}`);
+      throw new Error(
+        `Failed to parse model response: ${error instanceof Error ? error.message : String(error)}`,
+      );
     }
   }
 
@@ -220,7 +226,10 @@ JSON 格式如下：
     }
 
     // Validate min < max
-    if (r.x_min_percent >= r.x_max_percent || r.y_min_percent >= r.y_max_percent) {
+    if (
+      r.x_min_percent >= r.x_max_percent ||
+      r.y_min_percent >= r.y_max_percent
+    ) {
       return false;
     }
 
@@ -234,4 +243,3 @@ JSON 格式如下：
 export function createQwenVLService(config: QwenVLConfig): QwenVLService {
   return new QwenVLService(config);
 }
-

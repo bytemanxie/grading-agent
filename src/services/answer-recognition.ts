@@ -3,10 +3,11 @@
  * 答题识别服务
  */
 
-import { ChatOpenAI } from '@langchain/openai';
 import { HumanMessage } from '@langchain/core/messages';
-import type { QuestionType, QuestionRegion } from '../types/region.js';
-import type { QuestionAnswer } from '../types/answer.js';
+import { ChatOpenAI } from '@langchain/openai';
+
+import type { QuestionAnswer } from '../common/types/answer.js';
+import type { QuestionType, QuestionRegion } from '../common/types/region.js';
 
 /**
  * Answer Recognition Service Configuration
@@ -282,10 +283,7 @@ JSON 格式：
     const q = question as Record<string, unknown>;
 
     // Check required fields
-    if (
-      typeof q.question_number !== 'number' ||
-      typeof q.answer !== 'string'
-    ) {
+    if (typeof q.question_number !== 'number' || typeof q.answer !== 'string') {
       return false;
     }
 
@@ -301,4 +299,3 @@ export function createAnswerRecognitionService(
 ): AnswerRecognitionService {
   return new AnswerRecognitionService(config);
 }
-

@@ -5,8 +5,8 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 
-import { QuestionAnswer } from '../../types/answer';
-import { QuestionRegion } from '../../types/region';
+import { QuestionAnswer } from '../../common/types/answer';
+import { QuestionRegion } from '../../common/types/region';
 
 export class QuestionAnswerResponse implements QuestionAnswer {
   @ApiProperty({ description: 'Question number', example: 1 })

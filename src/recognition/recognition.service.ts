@@ -5,14 +5,15 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 
-import { AnswerRecognitionService } from '../services/answer-recognition.service';
-import { ImageCropService } from '../services/image-crop.service';
-import { QwenVLService } from '../services/qwen-vl.service';
 import type {
   AnswerRecognitionResponse,
   RegionAnswerResult,
-} from '../types/answer';
-import type { RecognitionResult , QuestionRegion } from '../types/region';
+} from '../common/types/answer';
+import type { RecognitionResult, QuestionRegion } from '../common/types/region';
+
+import { AnswerRecognitionService } from './services/answer-recognition.service';
+import { ImageCropService } from './services/image-crop.service';
+import { QwenVLService } from './services/qwen-vl.service';
 
 @Injectable()
 export class RecognitionService {

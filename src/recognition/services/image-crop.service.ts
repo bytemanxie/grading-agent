@@ -8,8 +8,8 @@ import { promises as fs } from 'fs';
 import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import sharp from 'sharp';
 
-import { MAX_IMAGE_SIZE } from '../common/constants';
-import type { QuestionRegion } from '../types/region';
+import { MAX_IMAGE_SIZE } from '../../common/constants';
+import type { QuestionRegion } from '../../common/types/region';
 
 /**
  * Check if a string is a URL

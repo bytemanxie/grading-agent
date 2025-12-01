@@ -47,4 +47,3 @@ export interface RecognitionResult {
    */
   regions: QuestionRegion[];
 }
-

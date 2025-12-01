@@ -4,7 +4,8 @@
  */
 
 import sharp from 'sharp';
-import type { QuestionRegion } from '../types/region.js';
+
+import type { QuestionRegion } from '../common/types/region.js';
 
 /**
  * Check if a string is a URL
@@ -24,7 +25,9 @@ function isUrl(path: string): boolean {
 async function downloadImage(url: string): Promise<Buffer> {
   const response = await fetch(url);
   if (!response.ok) {
-    throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+    throw new Error(
+      `Failed to download image: ${response.status} ${response.statusText}`,
+    );
   }
   const arrayBuffer = await response.arrayBuffer();
   return Buffer.from(arrayBuffer);
@@ -77,12 +80,8 @@ export async function cropRegion(
   // Calculate actual pixel coordinates from percentage
   const left = Math.round((expandedXMin / 100) * width);
   const top = Math.round((expandedYMin / 100) * height);
-  const cropWidth = Math.round(
-    ((expandedXMax - expandedXMin) / 100) * width,
-  );
-  const cropHeight = Math.round(
-    ((expandedYMax - expandedYMin) / 100) * height,
-  );
+  const cropWidth = Math.round(((expandedXMax - expandedXMin) / 100) * width);
+  const cropHeight = Math.round(((expandedYMax - expandedYMin) / 100) * height);
 
   // Validate crop dimensions
   if (cropWidth <= 0 || cropHeight <= 0) {
@@ -109,4 +108,3 @@ export async function cropRegion(
 
   return cropped;
 }
-

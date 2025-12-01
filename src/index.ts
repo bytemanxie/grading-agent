@@ -6,22 +6,30 @@
 import 'dotenv/config';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { createQwenVLService } from './services/qwen-vl.js';
-import { cropRegion } from './services/image-crop.js';
+
+import type {
+  AnswerRecognitionResponse,
+  RegionAnswerResult,
+} from './common/types/answer.js';
+import type { RecognitionResult } from './common/types/region.js';
 import { createAnswerRecognitionService } from './services/answer-recognition.js';
-import type { RecognitionResult } from './types/region.js';
-import type { AnswerRecognitionResponse, RegionAnswerResult } from './types/answer.js';
+import { cropRegion } from './services/image-crop.js';
+import { createQwenVLService } from './services/qwen-vl.js';
 
 /**
  * Main function to recognize question regions and answers from exam paper
  */
 async function main() {
   const apiKey = process.env.DASHSCOPE_API_KEY;
-  const imageUrl = process.argv[2] || 'https://dl-exam-1353588171.cos.ap-guangzhou.myqcloud.com/data/school_18/grade_12/exam_68/stu_100025/grading_answer_sheet/100025_1.webp';
+  const imageUrl =
+    process.argv[2] ||
+    'https://dl-exam-1353588171.cos.ap-guangzhou.myqcloud.com/data/school_18/grade_12/exam_68/stu_100025/grading_answer_sheet/100025_1.webp';
 
   if (!apiKey) {
     console.error('Error: DASHSCOPE_API_KEY environment variable is required');
-    console.error('Please set DASHSCOPE_API_KEY in your .env file or environment');
+    console.error(
+      'Please set DASHSCOPE_API_KEY in your .env file or environment',
+    );
     process.exit(1);
   }
 
@@ -37,15 +45,20 @@ async function main() {
     const regionService = createQwenVLService({
       apiKey,
       model: process.env.QWEN_VL_MODEL || 'qwen-vl-max-latest',
-      baseURL: process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      baseURL:
+        process.env.DASHSCOPE_BASE_URL ||
+        'https://dashscope.aliyuncs.com/compatible-mode/v1',
     });
 
     console.log(`Recognizing regions from image: ${imageUrl}`);
-    const regionResult: RecognitionResult = await regionService.recognizeRegions(imageUrl);
+    const regionResult: RecognitionResult =
+      await regionService.recognizeRegions(imageUrl);
 
     console.log(`\nFound ${regionResult.regions.length} regions:`);
     regionResult.regions.forEach((region, index) => {
-      console.log(`  ${index + 1}. ${region.type} region (${region.x_min_percent}%, ${region.y_min_percent}% - ${region.x_max_percent}%, ${region.y_max_percent}%)`);
+      console.log(
+        `  ${index + 1}. ${region.type} region (${region.x_min_percent}%, ${region.y_min_percent}% - ${region.x_max_percent}%, ${region.y_max_percent}%)`,
+      );
     });
 
     // Step 2: Crop regions and recognize answers
@@ -53,7 +66,9 @@ async function main() {
     const answerService = createAnswerRecognitionService({
       apiKey,
       model: process.env.QWEN_VL_MODEL || 'qwen-vl-max-latest',
-      baseURL: process.env.DASHSCOPE_BASE_URL || 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+      baseURL:
+        process.env.DASHSCOPE_BASE_URL ||
+        'https://dashscope.aliyuncs.com/compatible-mode/v1',
     });
 
     const regionResults: RegionAnswerResult[] = [];
@@ -69,7 +84,9 @@ async function main() {
 
     for (let i = 0; i < regionResult.regions.length; i++) {
       const region = regionResult.regions[i];
-      console.log(`\nProcessing region ${i + 1}/${regionResult.regions.length} (${region.type})...`);
+      console.log(
+        `\nProcessing region ${i + 1}/${regionResult.regions.length} (${region.type})...`,
+      );
 
       try {
         // Crop the region (with 2% expansion by default)
@@ -103,7 +120,10 @@ async function main() {
           questions,
         });
       } catch (error) {
-        console.error(`  Error processing region ${i + 1}:`, error instanceof Error ? error.message : String(error));
+        console.error(
+          `  Error processing region ${i + 1}:`,
+          error instanceof Error ? error.message : String(error),
+        );
         // Continue with other regions even if one fails
         regionResults.push({
           type: region.type,
@@ -139,7 +159,10 @@ async function main() {
       });
     });
   } catch (error) {
-    console.error('\nError:', error instanceof Error ? error.message : String(error));
+    console.error(
+      '\nError:',
+      error instanceof Error ? error.message : String(error),
+    );
     if (error instanceof Error && error.stack) {
       console.error('\nStack trace:', error.stack);
     }
