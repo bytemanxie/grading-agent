@@ -1,0 +1,42 @@
+{
+  "name": "grading-agent",
+  "version": "1.0.0",
+  "description": "LangChain TypeScript project for calling Qwen3-VL model to segment exam paper regions",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
+    "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
+    "type-check": "tsc --noEmit",
+    "rotate-image": "tsx scripts/rotate-image.ts"
+  },
+  "keywords": [
+    "langchain",
+    "qwen",
+    "vision",
+    "exam",
+    "grading"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@langchain/community": "^0.3.57",
+    "@langchain/core": "^0.3.35",
+    "@langchain/openai": "^0.3.0",
+    "dotenv": "^16.4.7",
+    "langchain": "^0.3.35",
+    "sharp": "^0.33.5"
+  },
+  "devDependencies": {
+    "@lobehub/lint": "^1.26.2",
+    "@types/node": "^22.18.9",
+    "eslint": "^8.57.1",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3"
+  },
+  "packageManager": "pnpm@10.18.3+sha512.bbd16e6d7286fd7e01f6b3c0b3c932cda2965c06a908328f74663f10a9aea51f1129eea615134bf992831b009eabe167ecb7008b597f40ff9bc75946aadfb08d"
+}
