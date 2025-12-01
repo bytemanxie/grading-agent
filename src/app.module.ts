@@ -7,6 +7,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
 import configuration from './config/configuration';
+import { GradingModule } from './grading/grading.module';
 import { RecognitionModule } from './recognition/recognition.module';
 
 @Module({
@@ -16,6 +17,7 @@ import { RecognitionModule } from './recognition/recognition.module';
       load: [configuration],
     }),
     RecognitionModule,
+    GradingModule,
   ],
 })
 export class AppModule {}

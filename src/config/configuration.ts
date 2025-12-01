@@ -15,4 +15,7 @@ export default () => ({
     port: parseInt(process.env.PORT || '14000', 10),
     env: process.env.NODE_ENV || 'development',
   },
+  grading: {
+    maxConcurrent: parseInt(process.env.GRADING_MAX_CONCURRENT || '5', 10),
+  },
 });
