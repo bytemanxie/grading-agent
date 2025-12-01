@@ -12,7 +12,7 @@ export default () => ({
       'https://dashscope.aliyuncs.com/compatible-mode/v1',
   },
   server: {
-    port: parseInt(process.env.PORT || '3002', 10),
+    port: parseInt(process.env.PORT || '14000', 10),
     env: process.env.NODE_ENV || 'development',
   },
 });

@@ -1,0 +1,77 @@
+name: Auto Deploy to Server
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+
+jobs:
+  deploy:
+    name: Deploy to Production Server
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ vars.SERVER_HOST }}
+          username: ${{ vars.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          port: ${{ vars.SERVER_PORT || 22 }}
+          debug: true
+          script: |
+            set -e
+            set -x
+            echo "========================================="
+            echo "开始部署流程"
+            echo "========================================="
+
+            echo ">>> 当前用户: $(whoami)"
+            echo ">>> 当前时间: $(date)"
+            echo ">>> 服务器名称: $(hostname)"
+
+            echo ">>> 切换到项目目录..."
+            cd ${{ vars.SERVER_PROJECT_PATH }}
+            echo ">>> 当前目录: $(pwd)"
+
+            echo ">>> 检查 Git 状态..."
+            git status
+
+            echo ">>> 拉取最新代码..."
+            git pull origin main
+
+            echo ">>> 显示最新提交..."
+            git log -1 --pretty=format:"%h - %an, %ar : %s"
+            echo ""
+
+            echo ">>> 安装依赖..."
+            pnpm install
+
+            echo ">>> 开始构建..."
+            pnpm build
+
+            echo ">>> 使用 PM2 管理应用进程..."
+            # 检查应用是否已在运行
+            if pm2 list | grep -q "grading-agent"; then
+              echo ">>> 停止并删除旧进程..."
+              pm2 delete grading-agent
+            else
+              echo ">>> 未发现运行中的进程"
+            fi
+
+            echo ">>> 启动新的应用进程..."
+            pm2 start pnpm --name "grading-agent" -- start:prod
+
+            echo ">>> 保存 PM2 进程列表..."
+            pm2 save
+
+            echo ">>> 当前 PM2 进程列表:"
+            pm2 list
+
+            echo "========================================="
+            echo "部署完成！"
+            echo "========================================="
+

@@ -47,7 +47,7 @@ Edit `.env` and add your configuration:
 DASHSCOPE_API_KEY=your-api-key-here
 QWEN_VL_MODEL=qwen-vl-max-latest
 DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
-PORT=3002
+PORT=14000
 NODE_ENV=development
 ```
 
@@ -64,14 +64,14 @@ pnpm build
 pnpm start:prod
 ```
 
-The server will start on `http://localhost:3002` by default.
+The server will start on `http://localhost:14000` by default.
 
 ### API Documentation
 
 Once the server is running, visit:
 
-- Swagger UI: `http://localhost:3002/api/docs`
-- Health Check: `http://localhost:3002/health`
+- Swagger UI: `http://localhost:14000/api/docs`
+- Health Check: `http://localhost:14000/health`
 
 ### API Endpoints
 
@@ -174,14 +174,14 @@ Recognize answers from exam paper regions.
 
 ```bash
 # Recognize regions
-curl -X POST http://localhost:3002/api/recognition/regions \
+curl -X POST http://localhost:14000/api/recognition/regions \
   -H "Content-Type: application/json" \
   -d '{
     "imageUrl": "https://example.com/exam-paper.jpg"
   }'
 
 # Recognize answers
-curl -X POST http://localhost:3002/api/recognition/answers \
+curl -X POST http://localhost:14000/api/recognition/answers \
   -H "Content-Type: application/json" \
   -d '{
     "imageUrl": "https://example.com/exam-paper.jpg",
@@ -223,7 +223,7 @@ const answers = await answerRecognitionService.recognizeAnswers(
 Configure the recognition API URL in dl-front:
 
 ```env
-NEXT_PUBLIC_RECOGNITION_API_URL=http://localhost:3002/api
+NEXT_PUBLIC_RECOGNITION_API_URL=http://localhost:14000/api
 ```
 
 ## Output Format
@@ -313,7 +313,7 @@ grading-agent/
     - `qwen-vl-plus-latest`: Qwen VL Plus (增强版)
     - `qwen3-vl-plus`: Qwen3 VL Plus (最新版本)
 - `DASHSCOPE_BASE_URL` (optional): API base URL (default: `https://dashscope.aliyuncs.com/compatible-mode/v1`)
-- `PORT` (optional): Server port (default: `3002`)
+- `PORT` (optional): Server port (default: `14000`)
 - `NODE_ENV` (optional): Environment (default: `development`)
 
 ## Architecture
