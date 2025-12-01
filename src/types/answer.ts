@@ -3,7 +3,7 @@
  * 答题识别类型定义
  */
 
-import type { QuestionType, QuestionRegion } from './region.js';
+import type { QuestionType, QuestionRegion } from './region';
 
 /**
  * Single question answer result
@@ -61,4 +61,3 @@ export interface AnswerRecognitionResponse {
    */
   regions: RegionAnswerResult[];
 }
-

@@ -1,23 +1,68 @@
-const config = require('@lobehub/lint').eslint;
-
-// Remove Next.js specific rules for this project
-config.rules['unicorn/no-negated-condition'] = 0;
-config.rules['unicorn/prefer-type-error'] = 0;
-config.rules['unicorn/prefer-logical-operator-over-ternary'] = 0;
-config.rules['unicorn/no-null'] = 0;
-config.rules['unicorn/no-typeof-undefined'] = 0;
-config.rules['unicorn/explicit-length-check'] = 0;
-config.rules['unicorn/prefer-code-point'] = 0;
-config.rules['no-extra-boolean-cast'] = 0;
-config.rules['unicorn/no-useless-undefined'] = 0;
-config.rules['unicorn/prefer-ternary'] = 0;
-config.rules['unicorn/prefer-spread'] = 0;
-config.rules['unicorn/catch-error-name'] = 0;
-config.rules['unicorn/no-array-for-each'] = 0;
-config.rules['unicorn/prefer-number-properties'] = 0;
-config.rules['unicorn/prefer-query-selector'] = 0;
-config.rules['unicorn/no-array-callback-reference'] = 0;
-config.rules['@typescript-eslint/no-useless-constructor'] = 0;
-
-module.exports = config;
-
+module.exports = {
+  parser: '@typescript-eslint/parser',
+  parserOptions: {
+    ecmaVersion: 2021,
+    sourceType: 'module',
+    project: './tsconfig.json',
+    // Enable decorator support
+    experimentalDecorators: true,
+    emitDecoratorMetadata: true,
+  },
+  plugins: ['@typescript-eslint', 'import'],
+  extends: [
+    'eslint:recommended',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:import/recommended',
+    'plugin:import/typescript',
+  ],
+  root: true,
+  env: {
+    node: true,
+    es2021: true,
+  },
+  ignorePatterns: ['.eslintrc.js', 'dist', 'node_modules'],
+  rules: {
+    // TypeScript specific rules
+    '@typescript-eslint/interface-name-prefix': 'off',
+    '@typescript-eslint/explicit-function-return-type': 'off',
+    '@typescript-eslint/explicit-module-boundary-types': 'off',
+    '@typescript-eslint/no-explicit-any': 'off',
+    '@typescript-eslint/no-unused-vars': [
+      'warn',
+      {
+        argsIgnorePattern: '^_',
+        varsIgnorePattern: '^_',
+      },
+    ],
+    // Import rules
+    'import/order': [
+      'warn',
+      {
+        groups: [
+          'builtin',
+          'external',
+          'internal',
+          'parent',
+          'sibling',
+          'index',
+        ],
+        'newlines-between': 'always',
+        alphabetize: {
+          order: 'asc',
+          caseInsensitive: true,
+        },
+      },
+    ],
+    // General rules
+    'no-console': 'warn',
+    'prefer-const': 'warn',
+  },
+  settings: {
+    'import/resolver': {
+      typescript: {
+        alwaysTryTypes: true,
+        project: './tsconfig.json',
+      },
+    },
+  },
+};
