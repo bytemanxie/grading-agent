@@ -11,9 +11,6 @@ export class QuestionRegionResponse implements QuestionRegion {
   @ApiProperty({ description: 'Question type', example: 'choice' })
   type: 'choice' | 'fill' | 'essay';
 
-  @ApiProperty({ description: 'Question number', example: 1 })
-  question_number: number;
-
   @ApiProperty({
     description: 'Minimum X coordinate as percentage',
     example: 5.0,

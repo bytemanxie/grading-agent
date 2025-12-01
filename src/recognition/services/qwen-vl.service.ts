@@ -127,43 +127,64 @@ export class QwenVLService {
    * Build prompt for region recognition
    */
   private buildPrompt(): string {
-    return `请分析这张试卷图片，识别出大的答题区域，包括：
+    return `请分析这张试卷图片，识别出答题区域：
 
-1. **选择题区域**（choice）：包含所有选择题的大区域
-2. **填空题区域**（fill）：包含所有填空题的大区域
-3. **解答题区域**（essay）：包含所有解答题的大区域
+1. **选择题区域**（choice）：精确识别每个选择题区域
+   - 如果选择题分布在多个位置，返回多个区域
+   - 确保覆盖所有选择题，不要遗漏
+   - 可以返回多个 choice 类型的区域
 
-**重要要求**：
-- 只识别大的答题区域，不要细分到每道题
-- 每个类型只返回一个区域，覆盖该类型所有题目的范围
+2. **填空题区域**（fill）：框选所有填空题
+   - 如果填空题分布在多个位置，返回多个区域
+   - 确保覆盖所有填空题，不要遗漏
+   - 可以返回多个 fill 类型的区域
+
+3. **解答题区域**（essay）：框选所有解答题
+   - 如果解答题分布在多个位置，返回多个区域
+   - 确保覆盖所有解答题，不要遗漏
+   - 可以返回多个 essay 类型的区域
+
+重要要求：
+- 选择题区域要精确识别，可以返回多个区域
+- 填空题和解答题如果分布在多个位置，也可以返回多个区域
+- **必须确保不遗漏任何题目，这是最重要的要求**
 - 如果试卷中没有某种类型的题目，则不要返回该类型
 - 坐标必须是百分比形式（0-100），相对于整个图片的尺寸
-- 必须返回有效的 JSON 格式
+- 必须直接返回有效的 JSON 格式，不要使用 markdown 代码块
 
-JSON 格式如下：
-
-\`\`\`json
+JSON 格式：
 {
   "regions": [
     {
       "type": "choice",
-      "question_number": 1,
       "x_min_percent": 5.0,
+      "y_min_percent": 10.0,
+      "x_max_percent": 45.0,
+      "y_max_percent": 30.0
+    },
+    {
+      "type": "choice",
+      "x_min_percent": 50.0,
       "y_min_percent": 10.0,
       "x_max_percent": 95.0,
       "y_max_percent": 30.0
     },
     {
       "type": "fill",
-      "question_number": 1,
       "x_min_percent": 5.0,
       "y_min_percent": 30.0,
+      "x_max_percent": 95.0,
+      "y_max_percent": 50.0
+    },
+    {
+      "type": "fill",
+      "x_min_percent": 5.0,
+      "y_min_percent": 50.0,
       "x_max_percent": 95.0,
       "y_max_percent": 60.0
     },
     {
       "type": "essay",
-      "question_number": 1,
       "x_min_percent": 5.0,
       "y_min_percent": 60.0,
       "x_max_percent": 95.0,
@@ -171,24 +192,47 @@ JSON 格式如下：
     }
   ]
 }
-\`\`\`
 
-请直接返回 JSON，不要包含其他文字说明。`;
+请直接返回 JSON，不要包含其他文字说明，不要使用 markdown 代码块。`;
   }
 
   /**
    * Parse model response to RecognitionResult
    */
   private parseResponse(content: string): RecognitionResult {
-    // Remove markdown code block markers if present
     let jsonContent = content.trim();
     this.logger.debug('Parsing response', { jsonContent });
 
-    // Extract JSON from markdown code blocks
+    // Strategy 1: Try to extract JSON from markdown code blocks
     const jsonMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)```/);
     if (jsonMatch) {
       jsonContent = jsonMatch[1].trim();
+      this.logger.debug('Extracted JSON from markdown code block');
     }
+
+    // Strategy 2: Try to find JSON object in the content
+    // Look for the first { and try to extract complete JSON
+    if (!jsonContent.startsWith('{')) {
+      const firstBrace = jsonContent.indexOf('{');
+      if (firstBrace !== -1) {
+        jsonContent = jsonContent.substring(firstBrace);
+        this.logger.debug('Extracted JSON starting from first brace');
+      }
+    }
+
+    // Strategy 3: If JSON appears to be truncated, try to find the last complete closing brace
+    if (jsonContent.endsWith(',') || !jsonContent.endsWith('}')) {
+      const lastCompleteBrace = jsonContent.lastIndexOf('}');
+      if (lastCompleteBrace !== -1) {
+        jsonContent = jsonContent.substring(0, lastCompleteBrace + 1);
+        this.logger.debug(
+          'Extracted complete JSON by finding last closing brace',
+        );
+      }
+    }
+
+    // Clean up: remove any trailing incomplete JSON
+    jsonContent = jsonContent.trim();
 
     try {
       const parsed = JSON.parse(jsonContent) as RecognitionResult;
@@ -203,6 +247,10 @@ JSON 格式如下：
         return this.validateRegion(region);
       });
 
+      if (validRegions.length === 0) {
+        throw new Error('No valid regions found in response');
+      }
+
       // Expand coordinates by 2% (outward expansion)
       const expandedRegions: QuestionRegion[] = validRegions.map((region) => ({
         ...region,
@@ -212,6 +260,10 @@ JSON 格式如下：
         y_max_percent: Math.min(100, region.y_max_percent + 2),
       }));
 
+      this.logger.debug('Successfully parsed response', {
+        regionCount: expandedRegions.length,
+      });
+
       return {
         regions: expandedRegions,
       };
@@ -219,6 +271,7 @@ JSON 格式如下：
       this.logger.error('Failed to parse model response', {
         error: error instanceof Error ? error.message : String(error),
         content,
+        jsonContent,
       });
       throw new Error(
         `Failed to parse model response: ${error instanceof Error ? error.message : String(error)}`,
@@ -236,11 +289,10 @@ JSON 格式如下：
 
     const r = region as Record<string, unknown>;
 
-    // Check required fields
+    // Check required fields (no question_number needed)
     if (
       typeof r.type !== 'string' ||
       !['choice', 'fill', 'essay'].includes(r.type) ||
-      typeof r.question_number !== 'number' ||
       typeof r.x_min_percent !== 'number' ||
       typeof r.y_min_percent !== 'number' ||
       typeof r.x_max_percent !== 'number' ||

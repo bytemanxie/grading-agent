@@ -13,11 +13,6 @@ export interface QuestionRegion {
   type: QuestionType;
 
   /**
-   * Question number (1-based)
-   */
-  question_number: number;
-
-  /**
    * Minimum X coordinate as percentage (0-100)
    */
   x_min_percent: number;
