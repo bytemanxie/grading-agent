@@ -16,7 +16,10 @@ import {
   CallbackService,
   type CallbackData,
 } from './services/callback.service';
-import { ScoreCalculationService } from './services/score-calculation.service';
+import {
+  ScoreCalculationService,
+  type ScoreCalculationResult,
+} from './services/score-calculation.service';
 
 @Injectable()
 export class GradingService {
@@ -52,7 +55,7 @@ export class GradingService {
         try {
           await this.gradeSheet(
             sheet.gradingSheetId,
-            sheet.studentSheetImageUrl,
+            sheet.studentSheetImageUrls,
             dto.blankSheetRecognition,
             dto.answerRecognition,
             dto.callbackUrl,
@@ -86,56 +89,105 @@ export class GradingService {
   }
 
   /**
-   * Grade a single sheet
-   * 批改单张卷子
+   * Grade a single sheet (may contain multiple pages)
+   * 批改单张卷子（可能包含多页）
    * @param gradingSheetId GradingSheet ID
-   * @param studentSheetImageUrl Student answer sheet image URL
-   * @param blankSheetRecognition Blank sheet recognition result
-   * @param answerRecognition Standard answer recognition result
+   * @param studentSheetImageUrls Student answer sheet image URLs (ordered by page number)
+   * @param blankSheetRecognition Blank sheet recognition results (ordered by page number)
+   * @param answerRecognition Standard answer recognition results (ordered by page number)
    * @param callbackUrl Callback URL
    */
   private async gradeSheet(
     gradingSheetId: number,
-    studentSheetImageUrl: string,
-    blankSheetRecognition: RecognitionResult,
-    answerRecognition: AnswerRecognitionResponse,
+    studentSheetImageUrls: string[],
+    blankSheetRecognition: RecognitionResult[],
+    answerRecognition: AnswerRecognitionResponse[],
     callbackUrl: string,
   ): Promise<void> {
-    this.logger.log(`Grading sheet ${gradingSheetId}...`);
+    this.logger.log(
+      `Grading sheet ${gradingSheetId} with ${studentSheetImageUrls.length} pages...`,
+    );
 
     try {
-      // Step 1: Recognize student answers
-      const studentAnswers =
-        await this.recognitionService.recognizeAnswers(studentSheetImageUrl);
+      // Validate arrays have the same length
+      if (
+        studentSheetImageUrls.length !== blankSheetRecognition.length ||
+        studentSheetImageUrls.length !== answerRecognition.length
+      ) {
+        throw new Error(
+          `Mismatch in array lengths: student sheets (${studentSheetImageUrls.length}), blank sheets (${blankSheetRecognition.length}), answer keys (${answerRecognition.length})`,
+        );
+      }
 
-      this.logger.debug(
-        `Student answers recognized for sheet ${gradingSheetId}`,
-      );
+      // Process each page: recognize answers and calculate scores
+      const pageResults: Array<{
+        studentAnswers: AnswerRecognitionResponse;
+        scoreResult: ScoreCalculationResult;
+      }> = [];
 
-      // Step 2: Calculate scores using AI model
-      const scoreResult = await this.scoreCalculationService.calculateScores(
-        studentAnswers,
-        answerRecognition,
+      for (let i = 0; i < studentSheetImageUrls.length; i++) {
+        const studentSheetImageUrl = studentSheetImageUrls[i];
+        // Note: pageBlankSheetRecognition is available but not currently used in recognition
+        // It may be needed for future enhancements
+        const _pageBlankSheetRecognition = blankSheetRecognition[i];
+        const pageAnswerRecognition = answerRecognition[i];
+
+        this.logger.debug(
+          `Processing page ${i + 1}/${studentSheetImageUrls.length} for sheet ${gradingSheetId}`,
+        );
+
+        // Step 1: Recognize student answers for this page
+        const studentAnswers =
+          await this.recognitionService.recognizeAnswers(studentSheetImageUrl);
+
+        this.logger.debug(
+          `Student answers recognized for sheet ${gradingSheetId}, page ${i + 1}`,
+        );
+
+        // Step 2: Calculate scores using AI model for this page
+        const scoreResult = await this.scoreCalculationService.calculateScores(
+          studentAnswers,
+          pageAnswerRecognition,
+        );
+
+        this.logger.debug(
+          `Scores calculated for sheet ${gradingSheetId}, page ${i + 1}: ${scoreResult.totalScore}`,
+        );
+
+        pageResults.push({
+          studentAnswers,
+          scoreResult,
+        });
+      }
+
+      // Step 3: Merge results from all pages
+      const mergedStudentAnswers =
+        this.scoreCalculationService.mergeAnswerRecognition(
+          pageResults.map((r) => r.studentAnswers),
+        );
+
+      const mergedScoreResult = this.scoreCalculationService.mergeScoreResults(
+        pageResults.map((r) => r.scoreResult),
       );
 
       this.logger.log(
-        `Scores calculated for sheet ${gradingSheetId}: ${scoreResult.totalScore}`,
+        `Merged scores for sheet ${gradingSheetId}: ${mergedScoreResult.totalScore} (from ${studentSheetImageUrls.length} pages)`,
       );
 
-      // Step 3: Prepare callback data
+      // Step 4: Prepare callback data
       const callbackData: CallbackData = {
         gradingSheetId,
-        recognizeResult: studentAnswers,
-        objectiveScores: scoreResult.objectiveScores,
-        subjectiveScores: scoreResult.subjectiveScores,
-        finalScore: scoreResult.totalScore.toString(),
+        recognizeResult: mergedStudentAnswers,
+        objectiveScores: mergedScoreResult.objectiveScores,
+        subjectiveScores: mergedScoreResult.subjectiveScores,
+        finalScore: mergedScoreResult.totalScore.toString(),
         status: 'completed',
         resultPayload: {
-          questions: scoreResult.questions,
+          questions: mergedScoreResult.questions,
         },
       };
 
-      // Step 4: Send callback
+      // Step 5: Send callback
       await this.callbackService.sendCallback(callbackUrl, callbackData);
 
       this.logger.log(`Sheet ${gradingSheetId} graded successfully`);

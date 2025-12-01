@@ -11,7 +11,9 @@ import { ConfigService } from '@nestjs/config';
 import type {
   AnswerRecognitionResponse,
   QuestionAnswer,
+  RegionAnswerResult,
 } from '../../common/types/answer';
+import type { QuestionRegion } from '../../common/types/region';
 
 /**
  * Question score result
@@ -273,5 +275,169 @@ ${studentAnswersText}
         `Failed to parse model response: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+  }
+
+  /**
+   * Merge multiple answer recognition results
+   * 合并多张答题卡的识别结果
+   * @param results Array of answer recognition results
+   * @returns Merged answer recognition result
+   */
+  mergeAnswerRecognition(
+    results: AnswerRecognitionResponse[],
+  ): AnswerRecognitionResponse {
+    this.logger.log(`Merging ${results.length} answer recognition results`);
+
+    // Use a Map to track unique questions by type and question number
+    const questionMap = new Map<string, QuestionAnswer>();
+
+    for (const result of results) {
+      for (const region of result.regions) {
+        for (const question of region.questions) {
+          const key = `${region.type}_${question.question_number}`;
+          // If question already exists, keep the first one (or you could merge/override based on business logic)
+          if (!questionMap.has(key)) {
+            questionMap.set(key, question);
+          }
+        }
+      }
+    }
+
+    // Group questions by type
+    const questionsByType = new Map<
+      'choice' | 'fill' | 'essay',
+      QuestionAnswer[]
+    >();
+
+    for (const [key, question] of questionMap.entries()) {
+      const type = key.split('_')[0] as 'choice' | 'fill' | 'essay';
+      if (!questionsByType.has(type)) {
+        questionsByType.set(type, []);
+      }
+      questionsByType.get(type)!.push(question);
+    }
+
+    // Build merged regions
+    const mergedRegions: RegionAnswerResult[] = [];
+
+    for (const [type, questions] of questionsByType.entries()) {
+      // Sort questions by question number
+      questions.sort((a, b) => a.question_number - b.question_number);
+
+      const region: QuestionRegion = {
+        type: type as 'choice' | 'fill' | 'essay',
+        x_min_percent: 0,
+        y_min_percent: 0,
+        x_max_percent: 100,
+        y_max_percent: 100,
+      };
+
+      mergedRegions.push({
+        type: type as 'choice' | 'fill' | 'essay',
+        region,
+        questions,
+      });
+    }
+
+    // Sort regions by first question number
+    mergedRegions.sort((a, b) => {
+      const qA = a.questions[0]?.question_number || 0;
+      const qB = b.questions[0]?.question_number || 0;
+      return qA - qB;
+    });
+
+    this.logger.log(
+      `Merged ${questionMap.size} unique questions into ${mergedRegions.length} regions`,
+    );
+
+    return {
+      regions: mergedRegions,
+    };
+  }
+
+  /**
+   * Merge multiple score calculation results
+   * 合并多个判分结果
+   * @param results Array of score calculation results
+   * @returns Merged score calculation result
+   */
+  mergeScoreResults(results: ScoreCalculationResult[]): ScoreCalculationResult {
+    this.logger.log(`Merging ${results.length} score calculation results`);
+
+    // Use Maps to track unique questions and scores
+    const questionMap = new Map<number, QuestionScore>();
+    const objectiveScoresMap = new Map<
+      number,
+      { score: number; max_score: number }
+    >();
+    const subjectiveScoresMap = new Map<
+      number,
+      { score: number; max_score: number }
+    >();
+
+    let totalScore = 0;
+
+    for (const result of results) {
+      // Merge questions (if duplicate question_number, keep the first one)
+      for (const question of result.questions) {
+        if (!questionMap.has(question.question_number)) {
+          questionMap.set(question.question_number, question);
+          totalScore += question.score;
+        }
+      }
+
+      // Merge objective scores (if duplicate, keep the first one)
+      for (const [questionNumber, scores] of Object.entries(
+        result.objectiveScores,
+      )) {
+        const num = parseInt(questionNumber, 10);
+        if (!objectiveScoresMap.has(num)) {
+          objectiveScoresMap.set(num, scores);
+        }
+      }
+
+      // Merge subjective scores (if duplicate, keep the first one)
+      for (const [questionNumber, scores] of Object.entries(
+        result.subjectiveScores,
+      )) {
+        const num = parseInt(questionNumber, 10);
+        if (!subjectiveScoresMap.has(num)) {
+          subjectiveScoresMap.set(num, scores);
+        }
+      }
+    }
+
+    // Convert maps to objects
+    const objectiveScores: Record<
+      number,
+      { score: number; max_score: number }
+    > = {};
+    for (const [num, scores] of objectiveScoresMap.entries()) {
+      objectiveScores[num] = scores;
+    }
+
+    const subjectiveScores: Record<
+      number,
+      { score: number; max_score: number }
+    > = {};
+    for (const [num, scores] of subjectiveScoresMap.entries()) {
+      subjectiveScores[num] = scores;
+    }
+
+    // Sort questions by question number
+    const questions = Array.from(questionMap.values()).sort(
+      (a, b) => a.question_number - b.question_number,
+    );
+
+    this.logger.log(
+      `Merged scores: ${questions.length} questions, total score: ${totalScore}`,
+    );
+
+    return {
+      questions,
+      objectiveScores,
+      subjectiveScores,
+      totalScore,
+    };
   }
 }

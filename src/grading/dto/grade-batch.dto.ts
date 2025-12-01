@@ -7,10 +7,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsArray,
-  IsObject,
   IsString,
   IsUrl,
   ValidateNested,
+  ArrayMinSize,
 } from 'class-validator';
 
 import type { AnswerRecognitionResponse } from '../../common/types/answer';
@@ -28,12 +28,21 @@ export class SheetInfoDto {
   gradingSheetId: number;
 
   @ApiProperty({
-    description: 'Student answer sheet image URL',
-    example: 'https://example.com/student-sheet.jpg',
+    description: 'Student answer sheet image URLs (ordered by page number)',
+    example: [
+      'https://example.com/student-sheet-1.jpg',
+      'https://example.com/student-sheet-2.jpg',
+    ],
+    type: [String],
   })
-  @IsUrl({}, { message: 'studentSheetImageUrl must be a valid URL' })
-  @IsString()
-  studentSheetImageUrl: string;
+  @IsArray()
+  @ArrayMinSize(1, { message: 'At least one image URL is required' })
+  @IsUrl(
+    {},
+    { each: true, message: 'Each studentSheetImageUrl must be a valid URL' },
+  )
+  @IsString({ each: true })
+  studentSheetImageUrls: string[];
 }
 
 /**
@@ -42,48 +51,63 @@ export class SheetInfoDto {
  */
 export class GradeBatchDto {
   @ApiProperty({
-    description: 'Blank sheet recognition result (shared by all sheets)',
-    example: {
-      regions: [
-        {
-          type: 'choice',
-          x_min_percent: 10,
-          y_min_percent: 20,
-          x_max_percent: 90,
-          y_max_percent: 80,
-        },
-      ],
-    },
-  })
-  @IsObject()
-  blankSheetRecognition: RecognitionResult;
-
-  @ApiProperty({
     description:
-      'Answer recognition result with scoring points (shared by all sheets)',
-    example: {
-      regions: [
-        {
-          type: 'choice',
-          region: {
+      'Blank sheet recognition results (ordered by page number, shared by all sheets)',
+    example: [
+      {
+        regions: [
+          {
             type: 'choice',
             x_min_percent: 10,
             y_min_percent: 20,
             x_max_percent: 90,
             y_max_percent: 80,
           },
-          questions: [
-            {
-              question_number: 1,
-              answer: 'A',
-            },
-          ],
-        },
-      ],
-    },
+        ],
+      },
+    ],
+    type: 'array',
   })
-  @IsObject()
-  answerRecognition: AnswerRecognitionResponse;
+  @IsArray()
+  @ArrayMinSize(1, {
+    message: 'At least one blank sheet recognition is required',
+  })
+  @ValidateNested({ each: true })
+  @Type(() => Object)
+  blankSheetRecognition: RecognitionResult[];
+
+  @ApiProperty({
+    description:
+      'Answer recognition results with scoring points (ordered by page number, shared by all sheets)',
+    example: [
+      {
+        regions: [
+          {
+            type: 'choice',
+            region: {
+              type: 'choice',
+              x_min_percent: 10,
+              y_min_percent: 20,
+              x_max_percent: 90,
+              y_max_percent: 80,
+            },
+            questions: [
+              {
+                question_number: 1,
+                answer: 'A',
+              },
+            ],
+          },
+        ],
+      },
+    ],
+    type: 'array',
+  })
+  @IsArray()
+  @ArrayMinSize(1, { message: 'At least one answer recognition is required' })
+  @ValidateNested({ each: true })
+  @Type(() => Object)
+  answerRecognition: AnswerRecognitionResponse[];
 
   @ApiProperty({
     description:
@@ -100,11 +124,14 @@ export class GradeBatchDto {
     example: [
       {
         gradingSheetId: 123,
-        studentSheetImageUrl: 'https://example.com/student-sheet-1.jpg',
+        studentSheetImageUrls: [
+          'https://example.com/student-sheet-1.jpg',
+          'https://example.com/student-sheet-2.jpg',
+        ],
       },
       {
         gradingSheetId: 124,
-        studentSheetImageUrl: 'https://example.com/student-sheet-2.jpg',
+        studentSheetImageUrls: ['https://example.com/student-sheet-3.jpg'],
       },
     ],
   })
