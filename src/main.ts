@@ -1,6 +1,7 @@
 /**
  * Application entry point
  * 应用入口
+ * Updated: Trigger deployment test
  */
 
 import 'reflect-metadata';
