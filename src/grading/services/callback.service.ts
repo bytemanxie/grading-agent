@@ -15,6 +15,7 @@ export interface CallbackData {
   objectiveScores?: any;
   subjectiveScores?: any;
   finalScore?: number | string;
+  maxScore?: number | string; // 试卷总分（满分）
   status: 'completed' | 'failed';
   failureReason?: string;
   resultPayload?: any;

@@ -42,6 +42,7 @@ export interface ScoreCalculationResult {
   objectiveScores: Record<number, { score: number; max_score: number }>;
   subjectiveScores: Record<number, { score: number; max_score: number }>;
   totalScore: number;
+  totalMaxScore: number; // 试卷总分（满分）
 }
 
 @Injectable()
@@ -124,9 +125,11 @@ export class ScoreCalculationService {
     > = {};
 
     let totalScore = 0;
+    let totalMaxScore = 0;
 
     for (const questionScore of scores.questions) {
       totalScore += questionScore.score;
+      totalMaxScore += questionScore.max_score;
 
       if (questionScore.type === 'choice' || questionScore.type === 'fill') {
         objectiveScores[questionScore.question_number] = {
@@ -141,13 +144,16 @@ export class ScoreCalculationService {
       }
     }
 
-    this.logger.log(`Score calculation completed. Total score: ${totalScore}`);
+    this.logger.log(
+      `Score calculation completed. Total score: ${totalScore}/${totalMaxScore}`,
+    );
 
     return {
       questions: scores.questions,
       objectiveScores,
       subjectiveScores,
       totalScore,
+      totalMaxScore,
     };
   }
 
@@ -166,11 +172,7 @@ export class ScoreCalculationService {
     // Format student answers
     const studentAnswersText = this.formatAnswers(studentAnswers, '学生答案');
 
-    // Build scores map and text
-    const scoresMap = new Map(
-      blankSheetRecognition.scores.map((s) => [s.questionNumber, s.score]),
-    );
-
+    // Build scores text
     const scoresText =
       blankSheetRecognition.scores.length > 0
         ? `\n每道题的满分：\n${blankSheetRecognition.scores
@@ -187,6 +189,12 @@ ${studentAnswersText}
 ${scoresText}
 
 请仔细对比每道题的学生答案和标准答案，根据标准答案中的得分点和上述满分进行判分。
+
+**重要：题号格式要求**
+- **题号必须保持原样**：题号必须与学生答案和标准答案中的题号完全一致
+- **中文题号**：如果题号是中文（如"六"、"作文"、"第一题"等），请保持原样，**不要转换为数字**（如不要将"六"转换为6，不要将"作文"理解为第6题）
+- **数字题号**：如果题号是数字（如1、2、3等），则使用数字格式
+- **示例**：如果题号是"六"，则返回 "question_number": "六"；如果题号是"作文"，则返回 "question_number": "作文"
 
 判分要求：
 1. **选择题**：答案完全正确得满分，否则 0 分
@@ -206,11 +214,18 @@ ${scoresText}
       "reason": "答案完全正确"
     },
     {
-      "question_number": 2,
+      "question_number": "六",
       "type": "essay",
       "score": 8,
       "max_score": 10,
       "reason": "答对了部分得分点，缺少关键步骤"
+    },
+    {
+      "question_number": "作文",
+      "type": "essay",
+      "score": 15,
+      "max_score": 20,
+      "reason": "内容完整，表达清晰"
     }
   ]
 }
@@ -519,8 +534,14 @@ ${scoresText}
       (a, b) => a.question_number - b.question_number,
     );
 
+    // Calculate total max score from merged questions (avoid duplicate counting)
+    const totalMaxScore = questions.reduce(
+      (sum, question) => sum + question.max_score,
+      0,
+    );
+
     this.logger.log(
-      `Merged scores: ${questions.length} questions, total score: ${totalScore}`,
+      `Merged scores: ${questions.length} questions, total score: ${totalScore}/${totalMaxScore}`,
     );
 
     return {
@@ -528,6 +549,7 @@ ${scoresText}
       objectiveScores,
       subjectiveScores,
       totalScore,
+      totalMaxScore,
     };
   }
 }

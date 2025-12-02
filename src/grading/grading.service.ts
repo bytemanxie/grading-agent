@@ -264,6 +264,7 @@ export class GradingService {
         objectiveScores: mergedScoreResult.objectiveScores,
         subjectiveScores: mergedScoreResult.subjectiveScores,
         finalScore: mergedScoreResult.totalScore.toString(),
+        maxScore: mergedScoreResult.totalMaxScore.toString(),
         status: 'completed',
         resultPayload: {
           questions: enrichedQuestions,
