@@ -110,12 +110,9 @@ export class GradingService {
 
     try {
       // Validate arrays have the same length
-      if (
-        studentSheetImageUrls.length !== blankSheetRecognition.length ||
-        studentSheetImageUrls.length !== answerRecognition.length
-      ) {
+      if (studentSheetImageUrls.length !== blankSheetRecognition.length) {
         throw new Error(
-          `Mismatch in array lengths: student sheets (${studentSheetImageUrls.length}), blank sheets (${blankSheetRecognition.length}), answer keys (${answerRecognition.length})`,
+          `Mismatch in array lengths: student sheets (${studentSheetImageUrls.length}), blank sheets (${blankSheetRecognition.length})`,
         );
       }
 
@@ -127,9 +124,7 @@ export class GradingService {
 
       for (let i = 0; i < studentSheetImageUrls.length; i++) {
         const studentSheetImageUrl = studentSheetImageUrls[i];
-        // Note: pageBlankSheetRecognition is available but not currently used in recognition
-        // It may be needed for future enhancements
-        const _pageBlankSheetRecognition = blankSheetRecognition[i];
+        const pageBlankSheetRecognition = blankSheetRecognition[i];
         const pageAnswerRecognition = answerRecognition[i];
 
         this.logger.debug(
@@ -137,17 +132,23 @@ export class GradingService {
         );
 
         // Step 1: Recognize student answers for this page
+        // Use new optimized method: choice regions cropped, essay regions from full image
         const studentAnswers =
-          await this.recognitionService.recognizeAnswers(studentSheetImageUrl);
+          await this.recognitionService.recognizeStudentAnswers(
+            studentSheetImageUrl,
+            pageBlankSheetRecognition,
+          );
 
         this.logger.debug(
           `Student answers recognized for sheet ${gradingSheetId}, page ${i + 1}`,
         );
 
         // Step 2: Calculate scores using AI model for this page
+        // Pass blankSheetRecognition to use scores for max_score validation
         const scoreResult = await this.scoreCalculationService.calculateScores(
           studentAnswers,
           pageAnswerRecognition,
+          pageBlankSheetRecognition,
         );
 
         this.logger.debug(

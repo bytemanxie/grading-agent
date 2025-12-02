@@ -13,7 +13,11 @@ import type {
   QuestionAnswer,
   RegionAnswerResult,
 } from '../../common/types/answer';
-import type { QuestionRegion, QuestionType } from '../../common/types/region';
+import type {
+  QuestionRegion,
+  QuestionType,
+  RecognitionResult,
+} from '../../common/types/region';
 
 /**
  * Question score result
@@ -71,18 +75,21 @@ export class ScoreCalculationService {
    * 通过对比学生答案和标准答案进行判分
    * @param studentAnswers Student answer recognition result
    * @param standardAnswers Standard answer recognition result (with scoring points)
+   * @param blankSheetRecognition Blank sheet recognition result (contains scores for max_score)
    * @returns Score calculation result
    */
   async calculateScores(
     studentAnswers: AnswerRecognitionResponse,
     standardAnswers: AnswerRecognitionResponse,
+    blankSheetRecognition: RecognitionResult,
   ): Promise<ScoreCalculationResult> {
     this.logger.log('Calculating scores using AI model...');
 
-    // Build prompt for score calculation
+    // Build prompt for score calculation (includes scores from blank sheet)
     const prompt = this.buildScoreCalculationPrompt(
       studentAnswers,
       standardAnswers,
+      blankSheetRecognition,
     );
 
     const message = new HumanMessage({
@@ -101,8 +108,8 @@ export class ScoreCalculationService {
       throw new Error('Model returned empty response');
     }
 
-    // Parse model response
-    const scores = this.parseScoreResponse(content);
+    // Parse model response and validate/override max_score with blankSheetRecognition.scores
+    const scores = this.parseScoreResponse(content, blankSheetRecognition);
 
     // Calculate objective and subjective scores
     const objectiveScores: Record<
@@ -149,6 +156,7 @@ export class ScoreCalculationService {
   private buildScoreCalculationPrompt(
     studentAnswers: AnswerRecognitionResponse,
     standardAnswers: AnswerRecognitionResponse,
+    blankSheetRecognition: RecognitionResult,
   ): string {
     // Format standard answers
     const standardAnswersText = this.formatAnswers(standardAnswers, '标准答案');
@@ -156,18 +164,33 @@ export class ScoreCalculationService {
     // Format student answers
     const studentAnswersText = this.formatAnswers(studentAnswers, '学生答案');
 
+    // Build scores map and text
+    const scoresMap = new Map(
+      blankSheetRecognition.scores.map((s) => [s.questionNumber, s.score]),
+    );
+
+    const scoresText =
+      blankSheetRecognition.scores.length > 0
+        ? `\n每道题的满分：\n${blankSheetRecognition.scores
+            .map((s) => `第 ${s.questionNumber} 题：满分 ${s.score} 分`)
+            .join('\n')}\n`
+        : '';
+
     return `请根据标准答案中的得分点，对学生答案进行判分。
 
 ${standardAnswersText}
 
 ${studentAnswersText}
 
-请仔细对比每道题的学生答案和标准答案，根据标准答案中的得分点进行判分。
+${scoresText}
+
+请仔细对比每道题的学生答案和标准答案，根据标准答案中的得分点和上述满分进行判分。
 
 判分要求：
 1. **选择题**：答案完全正确得满分，否则 0 分
 2. **填空题**：答案完全正确得满分，否则 0 分（可以适当考虑同义词或相近答案）
 3. **解答题**：根据标准答案中的得分点，按点给分。如果学生答案包含了某个得分点，给予相应分数；如果缺少关键步骤或答案不完整，扣除相应分数
+4. **重要**：每道题的 max_score 必须与上述满分一致
 
 请返回 JSON 格式，包含每道题的得分：
 \`\`\`json
@@ -218,8 +241,14 @@ ${studentAnswersText}
   /**
    * Parse model response to score result
    * 解析大模型返回的得分结果
+   * @param content Model response content
+   * @param blankSheetRecognition Blank sheet recognition result (contains scores for validation)
+   * @returns Parsed score result with validated max_score
    */
-  private parseScoreResponse(content: string): { questions: QuestionScore[] } {
+  private parseScoreResponse(
+    content: string,
+    blankSheetRecognition: RecognitionResult,
+  ): { questions: QuestionScore[] } {
     let jsonContent = content.trim();
     this.logger.debug('Parsing score response', { jsonContent });
 
@@ -228,6 +257,11 @@ ${studentAnswersText}
     if (jsonMatch) {
       jsonContent = jsonMatch[1].trim();
     }
+
+    // Build scores map from blank sheet recognition
+    const scoresMap = new Map(
+      blankSheetRecognition.scores.map((s) => [s.questionNumber, s.score]),
+    );
 
     try {
       const parsed = JSON.parse(jsonContent) as {
@@ -244,24 +278,42 @@ ${studentAnswersText}
         throw new Error('Invalid response format: missing questions array');
       }
 
-      // Validate and map questions
+      // Validate and map questions, override max_score with blankSheetRecognition.scores if available
       const questions: QuestionScore[] = parsed.questions
         .filter((q) => {
           return (
             typeof q.question_number === 'number' &&
             typeof q.score === 'number' &&
             typeof q.max_score === 'number' &&
-            q.score >= 0 &&
-            q.score <= q.max_score
+            q.score >= 0
           );
         })
-        .map((q) => ({
-          question_number: q.question_number,
-          type: q.type || 'choice', // Default to choice if not specified
-          score: q.score,
-          max_score: q.max_score,
-          reason: q.reason,
-        }));
+        .map((q) => {
+          // Use max_score from blankSheetRecognition.scores if available, otherwise use model's max_score
+          const correctMaxScore =
+            scoresMap.get(q.question_number) ?? q.max_score;
+
+          // Validate score doesn't exceed max_score
+          const validatedScore = Math.min(q.score, correctMaxScore);
+
+          // Log warning if max_score was overridden
+          if (
+            scoresMap.has(q.question_number) &&
+            q.max_score !== correctMaxScore
+          ) {
+            this.logger.warn(
+              `Question ${q.question_number} max_score mismatch: model returned ${q.max_score}, using ${correctMaxScore} from blank sheet`,
+            );
+          }
+
+          return {
+            question_number: q.question_number,
+            type: q.type || 'choice', // Default to choice if not specified
+            score: validatedScore,
+            max_score: correctMaxScore,
+            reason: q.reason,
+          };
+        });
 
       return { questions };
     } catch (error) {

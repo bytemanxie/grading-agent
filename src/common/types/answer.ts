@@ -20,7 +20,6 @@ export interface QuestionAnswer {
    * Answer content
    * 答案内容
    * - For choice questions: "A", "B", "C", "D", etc.
-   * - For fill questions: the filled text
    * - For essay questions: the answer text
    */
   answer: string;

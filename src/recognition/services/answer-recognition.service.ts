@@ -47,12 +47,14 @@ export class AnswerRecognitionService {
    * Recognize answers from full image URL (without region cropping)
    * 从完整图片URL识别答案（不需要区域裁剪）
    * @param imageUrl Image URL
+   * @param excludeChoiceRegions Optional: exclude choice regions and only recognize essay questions
    * @returns All recognized answers grouped by question type
    */
   async recognizeAnswersFromImage(
     imageUrl: string,
+    excludeChoiceRegions?: boolean,
   ): Promise<AnswerRecognitionResponse> {
-    const prompt = this.buildFullImagePrompt();
+    const prompt = this.buildFullImagePrompt(excludeChoiceRegions);
 
     const message = new HumanMessage({
       content: [
@@ -153,31 +155,6 @@ JSON 格式：
 
 请直接返回 JSON，不要包含其他文字说明。`,
 
-      fill: `请识别这张图片中的所有填空题答案。
-
-要求：
-1. 识别每道题的填空内容
-2. 如果题目没有填写答案，返回空字符串或"未作答"
-3. 返回 JSON 格式，包含所有题目的答案
-
-JSON 格式：
-\`\`\`json
-{
-  "questions": [
-    {
-      "question_number": 1,
-      "answer": "答案内容"
-    },
-    {
-      "question_number": 2,
-      "answer": "另一个答案"
-    }
-  ]
-}
-\`\`\`
-
-请直接返回 JSON，不要包含其他文字说明。`,
-
       essay: `请识别这张图片中的所有解答题答案。
 
 要求：
@@ -208,18 +185,49 @@ JSON 格式：
   }
 
   /**
-   * Build prompt for full image recognition (all question types)
+   * Build prompt for full image recognition (all question types or essay only)
+   * @param excludeChoiceRegions If true, only recognize essay questions (exclude choice questions)
    */
-  private buildFullImagePrompt(): string {
+  private buildFullImagePrompt(excludeChoiceRegions?: boolean): string {
+    if (excludeChoiceRegions) {
+      return `请识别这张学生答题卡图片中的解答题答案（不包括选择题）。
+
+要求：
+1. **只识别解答题**：忽略所有选择题区域，只识别解答题的答案内容
+2. 识别每道解答题的解答文字内容
+3. 如果题目没有解答，返回空字符串或"未作答"
+4. 不需要关注题目在图片中的位置区域，只需要识别每道解答题的答案内容
+5. 返回 JSON 格式，包含所有解答题的答案
+
+JSON 格式：
+\`\`\`json
+{
+  "questions": [
+    {
+      "question_number": 5,
+      "type": "essay",
+      "answer": "解答内容..."
+    },
+    {
+      "question_number": 6,
+      "type": "essay",
+      "answer": "另一个解答内容..."
+    }
+  ]
+}
+\`\`\`
+
+请直接返回 JSON，不要包含其他文字说明。`;
+    }
+
     return `请识别这张标准答案图片中每道题的答案。
 
 要求：
-1. 识别所有题目的答案，包括选择题、填空题和解答题
+1. 识别所有题目的答案，包括选择题和解答题
 2. **选择题**：识别选择的选项（A、B、C、D等）
-3. **填空题**：识别填空的内容
-4. **解答题**：识别解答的文字内容
-5. 不需要关注题目在图片中的位置区域，只需要识别每道题的答案内容
-6. 返回 JSON 格式，包含所有题目的答案
+3. **解答题**：识别解答的文字内容
+4. 不需要关注题目在图片中的位置区域，只需要识别每道题的答案内容
+5. 返回 JSON 格式，包含所有题目的答案
 
 JSON 格式：
 \`\`\`json
@@ -237,11 +245,6 @@ JSON 格式：
     },
     {
       "question_number": 3,
-      "type": "fill",
-      "answer": "答案内容"
-    },
-    {
-      "question_number": 4,
       "type": "essay",
       "answer": "解答内容..."
     }
