@@ -127,7 +127,7 @@ export class AnswerRecognitionService {
    * Build prompt based on question type
    */
   private buildPrompt(regionType: QuestionType): string {
-    const prompts = {
+    const prompts: Record<string, string> = {
       choice: `请识别这张图片中的所有选择题答案。
 
 要求：
@@ -299,11 +299,9 @@ JSON 格式：
             // Infer type: if answer is single letter (A-D), likely choice
             if (/^[A-D]$/i.test(q.answer.trim())) {
               questionType = 'choice';
-            } else if (q.answer.length > 50) {
-              // Long answer likely essay
-              questionType = 'essay';
             } else {
-              questionType = 'fill';
+              // Other answers default to essay
+              questionType = 'essay';
             }
           }
 

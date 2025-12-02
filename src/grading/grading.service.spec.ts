@@ -54,6 +54,10 @@ describe('GradingService Integration Test', () => {
             y_max_percent: 80,
           },
         ],
+        scores: [
+          { questionNumber: 1, score: 2 },
+          { questionNumber: 2, score: 2 },
+        ],
       },
     ];
 
@@ -142,7 +146,7 @@ describe('GradingService Integration Test', () => {
     console.log(`耗时: ${duration}ms (${(duration / 1000).toFixed(2)}s)`);
     // eslint-disable-next-line no-console
     console.log('');
-
+    console.log(result);
     // 验证结果
     expect(result).toBeDefined();
     expect(result.success).toBe(true);

@@ -5,11 +5,11 @@
 
 import { ApiProperty } from '@nestjs/swagger';
 
-import { QuestionRegion } from '../../common/types/region';
+import { QuestionRegion, QuestionScore } from '../../common/types/region';
 
 export class QuestionRegionResponse implements QuestionRegion {
   @ApiProperty({ description: 'Question type', example: 'choice' })
-  type: 'choice' | 'fill' | 'essay';
+  type: 'choice' | 'essay';
 
   @ApiProperty({
     description: 'Minimum X coordinate as percentage',
@@ -36,10 +36,30 @@ export class QuestionRegionResponse implements QuestionRegion {
   y_max_percent: number;
 }
 
+export class QuestionScoreResponse implements QuestionScore {
+  @ApiProperty({
+    description: 'Question number',
+    example: 1,
+  })
+  questionNumber: number;
+
+  @ApiProperty({
+    description: 'Score value',
+    example: 2,
+  })
+  score: number;
+}
+
 export class RegionRecognitionResponse {
   @ApiProperty({
     description: 'Array of recognized regions',
     type: [QuestionRegionResponse],
   })
   regions: QuestionRegionResponse[];
+
+  @ApiProperty({
+    description: 'Array of question scores',
+    type: [QuestionScoreResponse],
+  })
+  scores: QuestionScoreResponse[];
 }

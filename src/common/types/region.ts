@@ -1,14 +1,14 @@
 /**
  * Question type enumeration
  */
-export type QuestionType = 'choice' | 'fill' | 'essay';
+export type QuestionType = 'choice' | 'essay';
 
 /**
  * Question region with percentage coordinates
  */
 export interface QuestionRegion {
   /**
-   * Question type: choice (选择题), fill (填空题), essay (解答题)
+   * Question type: choice (选择题), essay (解答题)
    */
   type: QuestionType;
 
@@ -34,11 +34,31 @@ export interface QuestionRegion {
 }
 
 /**
- * Recognition result containing all detected regions
+ * Question score information
+ */
+export interface QuestionScore {
+  /**
+   * Question number (题号)
+   */
+  questionNumber: number;
+
+  /**
+   * Score value (分值)
+   */
+  score: number;
+}
+
+/**
+ * Recognition result containing all detected regions and scores
  */
 export interface RecognitionResult {
   /**
    * Array of detected question regions
    */
   regions: QuestionRegion[];
+
+  /**
+   * Array of question scores (每道题的分数)
+   */
+  scores: QuestionScore[];
 }

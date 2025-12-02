@@ -61,6 +61,11 @@ async function main() {
       );
     });
 
+    console.log(`\nFound ${regionResult.scores.length} question scores:`);
+    regionResult.scores.forEach((score) => {
+      console.log(`  Question ${score.questionNumber}: ${score.score} points`);
+    });
+
     // Step 2: Crop regions and recognize answers
     console.log('\nStep 2: Cropping regions and recognizing answers...');
     const answerService = createAnswerRecognitionService({

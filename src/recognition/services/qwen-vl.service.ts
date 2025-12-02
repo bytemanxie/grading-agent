@@ -127,69 +127,71 @@ export class QwenVLService {
    * Build prompt for region recognition
    */
   private buildPrompt(): string {
-    return `请分析这张试卷图片，识别出答题区域：
+    return `请分析这张空白答题卡图片，识别出答题区域和每道题的分数：
 
-1. **选择题区域**（choice）：精确识别每个选择题区域
-   - 如果选择题分布在多个位置，返回多个区域
-   - 确保覆盖所有选择题，不要遗漏
-   - 可以返回多个 choice 类型的区域
+1. **选择题区域**（choice）：精确识别所有选择题，合并为一个区域（可选）
+   - 如果试卷中有选择题，精确识别选择题的边界，确保包含所有选择题
+   - 只返回一个 choice 区域，覆盖所有选择题的范围
+   - 边界要精确，不要遗漏任何选择题
+   - **如果试卷中没有选择题，可以不返回此类型区域**
 
-2. **填空题区域**（fill）：框选所有填空题
-   - 如果填空题分布在多个位置，返回多个区域
-   - 确保覆盖所有填空题，不要遗漏
-   - 可以返回多个 fill 类型的区域
+2. **其他答题区域**（essay）：按照有分数字段的题目进行识别
+   - 根据试卷上标注了分值的题目来识别答题区域
+   - 每个有分数字段的题目对应一个 essay 区域
+   - 确保覆盖所有有分数字段的题目区域
 
-3. **解答题区域**（essay）：框选所有解答题
-   - 如果解答题分布在多个位置，返回多个区域
-   - 确保覆盖所有解答题，不要遗漏
-   - 可以返回多个 essay 类型的区域
+3. **分数信息**（scores）：识别试卷上每道题的题号和分值
+   - 从试卷图片上标注的分数中提取
+   - 返回题号和对应的分值
+   - 必须识别所有题目的分数
 
 重要要求：
-- 选择题区域要精确识别，可以返回多个区域
-- 填空题和解答题如果分布在多个位置，也可以返回多个区域
-- **必须确保不遗漏任何题目，这是最重要的要求**
-- 如果试卷中没有某种类型的题目，则不要返回该类型
+- 如果试卷中有选择题，选择题区域要精确识别，只返回一个区域；如果没有选择题，可以不返回choice类型
+- 其他区域按照有分数字段的题目进行识别，每个有分数字段的题目对应一个essay区域
+- 分数信息单独返回为一个数组
 - 坐标必须是百分比形式（0-100），相对于整个图片的尺寸
 - 必须直接返回有效的 JSON 格式，不要使用 markdown 代码块
 
-JSON 格式：
+JSON 格式（有选择题的情况）：
 {
   "regions": [
     {
       "type": "choice",
       "x_min_percent": 5.0,
       "y_min_percent": 10.0,
-      "x_max_percent": 45.0,
-      "y_max_percent": 30.0
-    },
-    {
-      "type": "choice",
-      "x_min_percent": 50.0,
-      "y_min_percent": 10.0,
       "x_max_percent": 95.0,
-      "y_max_percent": 30.0
-    },
-    {
-      "type": "fill",
-      "x_min_percent": 5.0,
-      "y_min_percent": 30.0,
-      "x_max_percent": 95.0,
-      "y_max_percent": 50.0
-    },
-    {
-      "type": "fill",
-      "x_min_percent": 5.0,
-      "y_min_percent": 50.0,
-      "x_max_percent": 95.0,
-      "y_max_percent": 60.0
+      "y_max_percent": 35.0
     },
     {
       "type": "essay",
       "x_min_percent": 5.0,
-      "y_min_percent": 60.0,
+      "y_min_percent": 40.0,
       "x_max_percent": 95.0,
-      "y_max_percent": 90.0
+      "y_max_percent": 95.0
     }
+  ],
+  "scores": [
+    {"questionNumber": 1, "score": 2},
+    {"questionNumber": 2, "score": 2},
+    {"questionNumber": 3, "score": 10},
+    {"questionNumber": 4, "score": 15}
+  ]
+}
+
+JSON 格式（没有选择题的情况）：
+{
+  "regions": [
+    {
+      "type": "essay",
+      "x_min_percent": 5.0,
+      "y_min_percent": 10.0,
+      "x_max_percent": 95.0,
+      "y_max_percent": 95.0
+    }
+  ],
+  "scores": [
+    {"questionNumber": 1, "score": 10},
+    {"questionNumber": 2, "score": 15}
   ]
 }
 
@@ -242,6 +244,10 @@ JSON 格式：
         throw new Error('Invalid response format: missing regions array');
       }
 
+      if (!parsed.scores || !Array.isArray(parsed.scores)) {
+        throw new Error('Invalid response format: missing scores array');
+      }
+
       // Validate and filter regions
       const validRegions: QuestionRegion[] = parsed.regions.filter((region) => {
         return this.validateRegion(region);
@@ -249,6 +255,15 @@ JSON 格式：
 
       if (validRegions.length === 0) {
         throw new Error('No valid regions found in response');
+      }
+
+      // Validate and filter scores
+      const validScores = parsed.scores.filter((score) => {
+        return this.validateScore(score);
+      });
+
+      if (validScores.length === 0) {
+        this.logger.warn('No valid scores found in response');
       }
 
       // Expand coordinates by 2% (outward expansion)
@@ -262,10 +277,12 @@ JSON 格式：
 
       this.logger.debug('Successfully parsed response', {
         regionCount: expandedRegions.length,
+        scoreCount: validScores.length,
       });
 
       return {
         regions: expandedRegions,
+        scores: validScores,
       };
     } catch (error) {
       this.logger.error('Failed to parse model response', {
@@ -289,10 +306,10 @@ JSON 格式：
 
     const r = region as Record<string, unknown>;
 
-    // Check required fields (no question_number needed)
+    // Check required fields (only choice and essay types)
     if (
       typeof r.type !== 'string' ||
-      !['choice', 'fill', 'essay'].includes(r.type) ||
+      !['choice', 'essay'].includes(r.type) ||
       typeof r.x_min_percent !== 'number' ||
       typeof r.y_min_percent !== 'number' ||
       typeof r.x_max_percent !== 'number' ||
@@ -320,6 +337,34 @@ JSON 格式：
       r.x_min_percent >= r.x_max_percent ||
       r.y_min_percent >= r.y_max_percent
     ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Validate a question score
+   */
+  private validateScore(score: unknown): boolean {
+    if (typeof score !== 'object' || score === null) {
+      return false;
+    }
+
+    const s = score as Record<string, unknown>;
+
+    // Check required fields
+    if (typeof s.questionNumber !== 'number' || typeof s.score !== 'number') {
+      return false;
+    }
+
+    // Validate questionNumber is positive
+    if (s.questionNumber <= 0 || !Number.isInteger(s.questionNumber)) {
+      return false;
+    }
+
+    // Validate score is positive
+    if (s.score <= 0) {
       return false;
     }
 

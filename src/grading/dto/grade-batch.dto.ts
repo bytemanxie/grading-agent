@@ -64,6 +64,10 @@ export class GradeBatchDto {
             y_max_percent: 80,
           },
         ],
+        scores: [
+          { questionNumber: 1, score: 2 },
+          { questionNumber: 2, score: 2 },
+        ],
       },
     ],
     type: 'array',

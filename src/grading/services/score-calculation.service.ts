@@ -13,7 +13,7 @@ import type {
   QuestionAnswer,
   RegionAnswerResult,
 } from '../../common/types/answer';
-import type { QuestionRegion } from '../../common/types/region';
+import type { QuestionRegion, QuestionType } from '../../common/types/region';
 
 /**
  * Question score result
@@ -205,9 +205,7 @@ ${studentAnswersText}
     const lines: string[] = [`${label}：`];
 
     for (const region of answers.regions) {
-      lines.push(
-        `\n【${region.type === 'choice' ? '选择题' : region.type === 'fill' ? '填空题' : '解答题'}】`,
-      );
+      lines.push(`\n【${region.type === 'choice' ? '选择题' : '解答题'}】`);
 
       for (const question of region.questions) {
         lines.push(`第 ${question.question_number} 题：${question.answer}`);
@@ -304,13 +302,13 @@ ${studentAnswersText}
     }
 
     // Group questions by type
-    const questionsByType = new Map<
-      'choice' | 'fill' | 'essay',
-      QuestionAnswer[]
-    >();
+    const questionsByType = new Map<QuestionType, QuestionAnswer[]>();
 
     for (const [key, question] of questionMap.entries()) {
-      const type = key.split('_')[0] as 'choice' | 'fill' | 'essay';
+      const rawType = key.split('_')[0] as 'choice' | 'fill' | 'essay';
+      // Map 'fill' to 'essay' since we no longer have 'fill' type
+      const type: QuestionType =
+        rawType === 'fill' ? 'essay' : (rawType as QuestionType);
       if (!questionsByType.has(type)) {
         questionsByType.set(type, []);
       }
@@ -325,7 +323,7 @@ ${studentAnswersText}
       questions.sort((a, b) => a.question_number - b.question_number);
 
       const region: QuestionRegion = {
-        type: type as 'choice' | 'fill' | 'essay',
+        type,
         x_min_percent: 0,
         y_min_percent: 0,
         x_max_percent: 100,
@@ -333,7 +331,7 @@ ${studentAnswersText}
       };
 
       mergedRegions.push({
-        type: type as 'choice' | 'fill' | 'essay',
+        type,
         region,
         questions,
       });
