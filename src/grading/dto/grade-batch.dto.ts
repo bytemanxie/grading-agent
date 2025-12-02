@@ -82,36 +82,36 @@ export class GradeBatchDto {
 
   @ApiProperty({
     description:
-      'Answer recognition results with scoring points (ordered by page number, shared by all sheets)',
-    example: [
-      {
-        regions: [
-          {
+      'Answer recognition results with scoring points. Can be a single merged result (all pages combined) or an array (ordered by page number, shared by all sheets).',
+    example: {
+      regions: [
+        {
+          type: 'choice',
+          region: {
             type: 'choice',
-            region: {
-              type: 'choice',
-              x_min_percent: 10,
-              y_min_percent: 20,
-              x_max_percent: 90,
-              y_max_percent: 80,
-            },
-            questions: [
-              {
-                question_number: 1,
-                answer: 'A',
-              },
-            ],
+            x_min_percent: 10,
+            y_min_percent: 20,
+            x_max_percent: 90,
+            y_max_percent: 80,
           },
-        ],
+          questions: [
+            {
+              question_number: 1,
+              answer: 'A',
+            },
+          ],
+        },
+      ],
+    },
+    oneOf: [
+      { $ref: '#/components/schemas/AnswerRecognitionResponse' },
+      {
+        type: 'array',
+        items: { $ref: '#/components/schemas/AnswerRecognitionResponse' },
       },
     ],
-    type: 'array',
   })
-  @IsArray()
-  @ArrayMinSize(1, { message: 'At least one answer recognition is required' })
-  @ValidateNested({ each: true })
-  @Type(() => Object)
-  answerRecognition: AnswerRecognitionResponse[];
+  answerRecognition: AnswerRecognitionResponse | AnswerRecognitionResponse[];
 
   @ApiProperty({
     description:

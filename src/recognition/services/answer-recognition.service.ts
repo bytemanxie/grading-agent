@@ -82,6 +82,59 @@ export class AnswerRecognitionService {
   }
 
   /**
+   * Recognize answers from multiple images (batch recognition)
+   * 批量识别多张图片的答案 - 在一次对话中将所有图片发送给大模型，返回一个合并的结果
+   * @param imageUrls Array of image URLs
+   * @param excludeChoiceRegions Optional: exclude choice regions and only recognize essay questions
+   * @returns Merged recognition result containing all questions from all images
+   */
+  async recognizeAnswersFromImages(
+    imageUrls: string[],
+    excludeChoiceRegions?: boolean,
+  ): Promise<AnswerRecognitionResponse> {
+    if (imageUrls.length === 0) {
+      throw new Error('At least one image URL is required');
+    }
+
+    this.logger.log(
+      `Recognizing answers from ${imageUrls.length} images in batch (merged result)`,
+    );
+
+    const prompt = this.buildBatchImagePrompt(
+      excludeChoiceRegions,
+      imageUrls.length,
+    );
+
+    // Build message with all images
+    const message = new HumanMessage({
+      content: [
+        // Add all images
+        ...imageUrls.map((url) => ({
+          type: 'image_url' as const,
+          image_url: {
+            url,
+          },
+        })),
+        // Add prompt text
+        {
+          type: 'text' as const,
+          text: prompt,
+        },
+      ],
+    });
+
+    const response = await this.model.invoke([message]);
+    const content = response.content as string;
+
+    if (!content) {
+      throw new Error('Model returned empty response');
+    }
+
+    // Parse as single merged result (not array)
+    return this.parseFullImageResponse(content);
+  }
+
+  /**
    * Recognize answers from cropped region image
    * @param imageBuffer Cropped image buffer
    * @param regionType Question type (choice/fill/essay)
@@ -256,6 +309,86 @@ JSON 格式：
   }
 
   /**
+   * Build prompt for batch image recognition
+   * @param excludeChoiceRegions If true, only recognize essay questions
+   * @param imageCount Number of images
+   */
+  private buildBatchImagePrompt(
+    excludeChoiceRegions?: boolean,
+    imageCount?: number,
+  ): string {
+    const imageCountText =
+      imageCount && imageCount > 1 ? `（共 ${imageCount} 张图片）` : '';
+
+    if (excludeChoiceRegions) {
+      return `请识别这些学生答题卡图片中的解答题答案（不包括选择题）${imageCountText}。
+
+要求：
+1. **只识别解答题**：忽略所有选择题区域，只识别解答题的答案内容
+2. **合并所有图片**：将所有图片中的解答题答案合并到一个结果中
+3. 识别每道解答题的解答文字内容
+4. 如果题目没有解答，返回空字符串或"未作答"
+5. 不需要关注题目在图片中的位置区域，只需要识别每道解答题的答案内容
+6. 返回 JSON 格式，包含所有图片中的所有解答题答案（合并为一个结果）
+
+JSON 格式：
+\`\`\`json
+{
+  "questions": [
+    {
+      "question_number": 5,
+      "type": "essay",
+      "answer": "解答内容..."
+    },
+    {
+      "question_number": 6,
+      "type": "essay",
+      "answer": "另一道题的解答内容..."
+    }
+  ]
+}
+\`\`\`
+
+请直接返回 JSON 对象，不要包含其他文字说明。`;
+    }
+
+    return `这些图片是标准答案图片${imageCountText}，请识别所有图片中每道题的标准答案。
+
+要求：
+1. **合并所有图片**：将所有图片中的题目答案合并到一个结果中
+2. 识别所有题目的标准答案，包括选择题和解答题
+3. **选择题**：识别标准答案的选项（A、B、C、D等）
+4. **解答题**：识别标准答案的文字内容
+5. 不需要关注题目在图片中的位置区域，只需要识别每道题的标准答案内容
+6. 返回 JSON 格式，包含所有图片中的所有题目答案（合并为一个结果）
+
+JSON 格式：
+\`\`\`json
+{
+  "questions": [
+    {
+      "question_number": 1,
+      "type": "choice",
+      "answer": "A"
+    },
+    {
+      "question_number": 2,
+      "type": "choice",
+      "answer": "B"
+    },
+    {
+      "question_number": 3,
+      "type": "essay",
+      "answer": "解答内容..."
+    }
+  ]
+}
+\`\`\`
+
+请直接返回 JSON 对象，不要包含其他文字说明。`;
+  }
+
+  /**
    * Parse full image response to AnswerRecognitionResponse
    */
   private parseFullImageResponse(content: string): AnswerRecognitionResponse {
@@ -379,6 +512,63 @@ JSON 格式：
       });
       throw new Error(
         `Failed to parse model response: ${error instanceof Error ? error.message : String(error)}`,
+      );
+    }
+  }
+
+  /**
+   * Parse batch response to array of AnswerRecognitionResponse
+   * @param content Response content from model
+   * @param imageCount Expected number of images
+   */
+  private parseBatchResponse(
+    content: string,
+    imageCount: number,
+  ): AnswerRecognitionResponse[] {
+    let jsonContent = content.trim();
+    this.logger.debug('Parsing batch response', { jsonContent, imageCount });
+
+    // Extract JSON from markdown code blocks
+    const jsonMatch = jsonContent.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (jsonMatch) {
+      jsonContent = jsonMatch[1].trim();
+    }
+
+    try {
+      const parsed = JSON.parse(jsonContent);
+
+      // Ensure it's an array
+      if (!Array.isArray(parsed)) {
+        throw new Error('Batch response must be an array');
+      }
+
+      // Parse each result in the array
+      return parsed.map((item, index) => {
+        try {
+          // Use the same parsing logic as parseFullImageResponse
+          // Wrap the single item in a way that parseFullImageResponse can handle
+          const wrappedContent = JSON.stringify({
+            questions: item.questions || [],
+          });
+          return this.parseFullImageResponse(wrappedContent);
+        } catch (error) {
+          this.logger.error(
+            `Failed to parse result for image ${index + 1}`,
+            error instanceof Error ? error.message : String(error),
+          );
+          // Return empty result if parsing fails
+          return {
+            regions: [],
+          };
+        }
+      });
+    } catch (error) {
+      this.logger.error(
+        'Failed to parse batch response',
+        error instanceof Error ? error.message : String(error),
+      );
+      throw new Error(
+        `Failed to parse batch response: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

@@ -65,13 +65,22 @@ export class GradingService {
             `Failed to grade sheet ${sheet.gradingSheetId}`,
             error instanceof Error ? error.message : String(error),
           );
-          // Send failure callback
-          await this.callbackService.sendCallback(dto.callbackUrl, {
-            gradingSheetId: sheet.gradingSheetId,
-            status: 'failed',
-            failureReason:
-              error instanceof Error ? error.message : 'Unknown error',
-          });
+          // Send failure callback (non-blocking: don't fail batch if callback fails)
+          try {
+            await this.callbackService.sendCallback(dto.callbackUrl, {
+              gradingSheetId: sheet.gradingSheetId,
+              status: 'failed',
+              failureReason:
+                error instanceof Error ? error.message : 'Unknown error',
+            });
+          } catch (callbackError) {
+            this.logger.warn(
+              `Failed to send failure callback for sheet ${sheet.gradingSheetId}`,
+              callbackError instanceof Error
+                ? callbackError.message
+                : String(callbackError),
+            );
+          }
         }
       }),
     );
@@ -89,19 +98,40 @@ export class GradingService {
   }
 
   /**
+   * Extract answer by question number from answer recognition result
+   * 从答案识别结果中提取指定题号的答案
+   * @param answerRecognition Answer recognition result
+   * @param questionNumber Question number
+   * @returns Answer string or undefined if not found
+   */
+  private extractAnswerByQuestionNumber(
+    answerRecognition: AnswerRecognitionResponse,
+    questionNumber: number,
+  ): string | undefined {
+    for (const region of answerRecognition.regions) {
+      for (const question of region.questions) {
+        if (question.question_number === questionNumber) {
+          return question.answer;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
    * Grade a single sheet (may contain multiple pages)
    * 批改单张卷子（可能包含多页）
    * @param gradingSheetId GradingSheet ID
    * @param studentSheetImageUrls Student answer sheet image URLs (ordered by page number)
    * @param blankSheetRecognition Blank sheet recognition results (ordered by page number)
-   * @param answerRecognition Standard answer recognition results (ordered by page number)
+   * @param answerRecognition Standard answer recognition results (can be single object or array)
    * @param callbackUrl Callback URL
    */
   private async gradeSheet(
     gradingSheetId: number,
     studentSheetImageUrls: string[],
     blankSheetRecognition: RecognitionResult[],
-    answerRecognition: AnswerRecognitionResponse[],
+    answerRecognition: AnswerRecognitionResponse | AnswerRecognitionResponse[],
     callbackUrl: string,
   ): Promise<void> {
     this.logger.log(
@@ -116,6 +146,12 @@ export class GradingService {
         );
       }
 
+      // Normalize answerRecognition: if single object, use it for all pages; if array, use per-page
+      const isSingleAnswerRecognition = !Array.isArray(answerRecognition);
+      const normalizedAnswerRecognition = isSingleAnswerRecognition
+        ? answerRecognition
+        : (answerRecognition as AnswerRecognitionResponse[]);
+
       // Process each page: recognize answers and calculate scores
       const pageResults: Array<{
         studentAnswers: AnswerRecognitionResponse;
@@ -125,7 +161,10 @@ export class GradingService {
       for (let i = 0; i < studentSheetImageUrls.length; i++) {
         const studentSheetImageUrl = studentSheetImageUrls[i];
         const pageBlankSheetRecognition = blankSheetRecognition[i];
-        const pageAnswerRecognition = answerRecognition[i];
+        // Use single answer recognition for all pages, or per-page if array
+        const pageAnswerRecognition = isSingleAnswerRecognition
+          ? normalizedAnswerRecognition
+          : normalizedAnswerRecognition[i];
 
         this.logger.debug(
           `Processing page ${i + 1}/${studentSheetImageUrls.length} for sheet ${gradingSheetId}`,
@@ -171,11 +210,54 @@ export class GradingService {
         pageResults.map((r) => r.scoreResult),
       );
 
+      // Get merged standard answers: if single object, use it directly; if array, merge it
+      const mergedStandardAnswers: AnswerRecognitionResponse =
+        isSingleAnswerRecognition
+          ? (normalizedAnswerRecognition as AnswerRecognitionResponse)
+          : this.scoreCalculationService.mergeAnswerRecognition(
+              normalizedAnswerRecognition as AnswerRecognitionResponse[],
+            );
+
       this.logger.log(
         `Merged scores for sheet ${gradingSheetId}: ${mergedScoreResult.totalScore} (from ${studentSheetImageUrls.length} pages)`,
       );
 
-      // Step 4: Prepare callback data
+      // Step 4: Enrich questions with student and standard answers
+      const enrichedQuestions = mergedScoreResult.questions.map((question) => {
+        const studentAnswer = this.extractAnswerByQuestionNumber(
+          mergedStudentAnswers,
+          question.question_number,
+        );
+        const standardAnswer = this.extractAnswerByQuestionNumber(
+          mergedStandardAnswers,
+          question.question_number,
+        );
+
+        return {
+          ...question,
+          studentAnswer: studentAnswer || undefined,
+          standardAnswer: standardAnswer || undefined,
+        };
+      });
+
+      // Log grading results for debugging
+      this.logger.log(`📊 Grading results for sheet ${gradingSheetId}:`, {
+        finalScore: mergedScoreResult.totalScore,
+        objectiveScores: mergedScoreResult.objectiveScores,
+        subjectiveScores: mergedScoreResult.subjectiveScores,
+        totalQuestions: enrichedQuestions.length,
+        questions: enrichedQuestions.map((q) => ({
+          question_number: q.question_number,
+          type: q.type,
+          score: q.score,
+          max_score: q.max_score,
+          reason: q.reason,
+          studentAnswer: q.studentAnswer,
+          standardAnswer: q.standardAnswer,
+        })),
+      });
+
+      // Step 5: Prepare callback data
       const callbackData: CallbackData = {
         gradingSheetId,
         recognizeResult: mergedStudentAnswers,
@@ -184,14 +266,26 @@ export class GradingService {
         finalScore: mergedScoreResult.totalScore.toString(),
         status: 'completed',
         resultPayload: {
-          questions: mergedScoreResult.questions,
+          questions: enrichedQuestions,
         },
       };
 
-      // Step 5: Send callback
-      await this.callbackService.sendCallback(callbackUrl, callbackData);
-
-      this.logger.log(`Sheet ${gradingSheetId} graded successfully`);
+      // Step 6: Send callback (non-blocking: don't fail grading if callback fails)
+      try {
+        await this.callbackService.sendCallback(callbackUrl, callbackData);
+        this.logger.log(`Sheet ${gradingSheetId} graded successfully`);
+      } catch (callbackError) {
+        // Log callback failure but don't fail the grading process
+        this.logger.warn(
+          `Callback failed for sheet ${gradingSheetId}, but grading completed successfully`,
+          callbackError instanceof Error
+            ? callbackError.message
+            : String(callbackError),
+        );
+        this.logger.log(
+          `Sheet ${gradingSheetId} graded successfully (callback failed)`,
+        );
+      }
     } catch (error) {
       this.logger.error(
         `Error grading sheet ${gradingSheetId}`,

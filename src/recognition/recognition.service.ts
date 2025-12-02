@@ -44,6 +44,19 @@ export class RecognitionService {
   }
 
   /**
+   * Recognize answers from multiple images (batch recognition)
+   * 批量识别多张答案图片 - 在一次对话中将所有图片发送给大模型，返回一个合并的结果
+   */
+  async recognizeAnswersBatch(
+    imageUrls: string[],
+  ): Promise<AnswerRecognitionResponse> {
+    this.logger.log(
+      `Recognizing answers from ${imageUrls.length} images in batch (merged result)`,
+    );
+    return this.answerRecognitionService.recognizeAnswersFromImages(imageUrls);
+  }
+
+  /**
    * Recognize answers from exam paper image with regions (legacy method)
    * 识别答案（使用区域分割的旧方法，保留用于兼容）
    */

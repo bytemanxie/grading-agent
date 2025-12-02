@@ -10,6 +10,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  BadRequestException,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 
@@ -59,13 +60,15 @@ export class RecognitionController {
   @Post('answers')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
-    summary: 'Recognize answers from answer sheet image',
-    description: '识别答案图片中的所有答案（整张图片识别，不需要区域分割）',
+    summary: 'Recognize answers from answer sheet image(s)',
+    description:
+      '识别答案图片中的所有答案（整张图片识别，不需要区域分割）。支持单张或批量识别。',
   })
   @ApiBody({ type: RecognizeAnswersDto })
   @ApiResponse({
     status: 200,
-    description: 'Answers recognized successfully',
+    description:
+      'Answers recognized successfully (merged result from all images)',
     type: AnswerRecognitionResponse,
   })
   @ApiResponse({
@@ -79,8 +82,25 @@ export class RecognitionController {
   async recognizeAnswers(
     @Body() dto: RecognizeAnswersDto,
   ): Promise<AnswerRecognitionResponse> {
-    this.logger.log(`Recognize answers request: ${dto.imageUrl}`);
-    const result = await this.recognitionService.recognizeAnswers(dto.imageUrl);
-    return result;
+    // Support both single and batch recognition
+    if (dto.imageUrls && dto.imageUrls.length > 0) {
+      this.logger.log(
+        `Recognize answers batch request: ${dto.imageUrls.length} images (merged result)`,
+      );
+      const result = await this.recognitionService.recognizeAnswersBatch(
+        dto.imageUrls,
+      );
+      return result;
+    } else if (dto.imageUrl) {
+      this.logger.log(`Recognize answers request: ${dto.imageUrl}`);
+      const result = await this.recognitionService.recognizeAnswers(
+        dto.imageUrl,
+      );
+      return result;
+    } else {
+      throw new BadRequestException(
+        'Either imageUrl or imageUrls must be provided',
+      );
+    }
   }
 }

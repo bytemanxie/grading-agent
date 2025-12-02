@@ -29,6 +29,8 @@ export interface QuestionScore {
   score: number;
   max_score: number;
   reason?: string;
+  studentAnswer?: string; // 学生答案
+  standardAnswer?: string; // 标准答案
 }
 
 /**
@@ -339,10 +341,47 @@ ${scoresText}
     this.logger.log(`Merging ${results.length} answer recognition results`);
 
     // Use a Map to track unique questions by type and question number
+    // Also track the original region information for each question type
     const questionMap = new Map<string, QuestionAnswer>();
+    const regionMap = new Map<string, QuestionRegion>();
 
     for (const result of results) {
       for (const region of result.regions) {
+        // Store/merge region coordinates for this type (independent of questions)
+        if (!regionMap.has(region.type)) {
+          // First occurrence of this region type: store its coordinates
+          regionMap.set(region.type, region.region);
+        } else {
+          // Merge coordinates if multiple pages have the same region type
+          const existingRegion = regionMap.get(region.type)!;
+          if (region.type === 'choice') {
+            // Merge choice regions: take the union bounding box
+            const mergedRegion: QuestionRegion = {
+              type: 'choice',
+              x_min_percent: Math.min(
+                existingRegion.x_min_percent,
+                region.region.x_min_percent,
+              ),
+              y_min_percent: Math.min(
+                existingRegion.y_min_percent,
+                region.region.y_min_percent,
+              ),
+              x_max_percent: Math.max(
+                existingRegion.x_max_percent,
+                region.region.x_max_percent,
+              ),
+              y_max_percent: Math.max(
+                existingRegion.y_max_percent,
+                region.region.y_max_percent,
+              ),
+            };
+            regionMap.set(region.type, mergedRegion);
+          }
+          // For essay regions, keep full image coordinates (0, 0, 100, 100)
+          // No need to update since essay regions already use full image coordinates
+        }
+
+        // Process questions in this region
         for (const question of region.questions) {
           const key = `${region.type}_${question.question_number}`;
           // If question already exists, keep the first one (or you could merge/override based on business logic)
@@ -367,14 +406,15 @@ ${scoresText}
       questionsByType.get(type)!.push(question);
     }
 
-    // Build merged regions
+    // Build merged regions with preserved original coordinates
     const mergedRegions: RegionAnswerResult[] = [];
 
     for (const [type, questions] of questionsByType.entries()) {
       // Sort questions by question number
       questions.sort((a, b) => a.question_number - b.question_number);
 
-      const region: QuestionRegion = {
+      // Use preserved region coordinates if available, otherwise use default full image
+      const region: QuestionRegion = regionMap.get(type) || {
         type,
         x_min_percent: 0,
         y_min_percent: 0,
