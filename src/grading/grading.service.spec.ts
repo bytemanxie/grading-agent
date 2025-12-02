@@ -65,25 +65,78 @@ describe('GradingService Integration Test', () => {
       'https://dl-exam-1353588171.cos.ap-guangzhou.myqcloud.com/data/school_undefined/grade_undefined/exam_70/blank_sheet/1764643620193-lynxnamc.webp':
         {
           scores: [
-            { score: 3, questionNumber: 1 },
-            { score: 2, questionNumber: 2 },
-            { score: 2, questionNumber: 4 },
-            { score: 2, questionNumber: 4 },
-            { score: 1, questionNumber: 4 },
-            { score: 3, questionNumber: 4 },
-            { score: 6, questionNumber: 5 },
-            { score: 4, questionNumber: 7 },
-            { score: 2, questionNumber: 8 },
-            { score: 2, questionNumber: 9 },
-            { score: 2, questionNumber: 9 },
-            { score: 5, questionNumber: 10 },
-            { score: 3, questionNumber: 13 },
-            { score: 3, questionNumber: 14 },
-            { score: 2, questionNumber: 15 },
-            { score: 4, questionNumber: 16 },
-            { score: 4, questionNumber: 17 },
-            { score: 2, questionNumber: 18 },
-            { score: 4, questionNumber: 18 },
+            {
+              score: 3,
+              questionNumber: 1,
+            },
+            {
+              score: 2,
+              questionNumber: 2,
+            },
+            {
+              score: 3,
+              questionNumber: 3,
+            },
+            {
+              score: 7,
+              questionNumber: 4,
+            },
+            {
+              score: 6,
+              questionNumber: 5,
+            },
+            {
+              score: 3,
+              questionNumber: 6,
+            },
+            {
+              score: 4,
+              questionNumber: 7,
+            },
+            {
+              score: 2,
+              questionNumber: 8,
+            },
+            {
+              score: 2,
+              questionNumber: 9,
+            },
+            {
+              score: 5,
+              questionNumber: 10,
+            },
+            {
+              score: 3,
+              questionNumber: 11,
+            },
+            {
+              score: 3,
+              questionNumber: 12,
+            },
+            {
+              score: 3,
+              questionNumber: 13,
+            },
+            {
+              score: 3,
+              questionNumber: 14,
+            },
+            {
+              score: 2,
+              questionNumber: 15,
+            },
+            {
+              score: 4,
+              questionNumber: 16,
+            },
+            {
+              score: 4,
+              questionNumber: 17,
+            },
+            {
+              score: 6,
+              questionNumber: 18,
+            },
           ],
           regions: [
             {
@@ -97,7 +150,7 @@ describe('GradingService Integration Test', () => {
         },
       'https://dl-exam-1353588171.cos.ap-guangzhou.myqcloud.com/data/school_undefined/grade_undefined/exam_70/blank_sheet/1764643620563-6zjkbglt.webp':
         {
-          scores: [{ score: 50, questionNumber: 6 }],
+          scores: [{ score: 50, questionNumber: '六' }],
           regions: [],
         },
     };

@@ -24,7 +24,7 @@ import type {
  * 题目得分结果
  */
 export interface QuestionScore {
-  question_number: number;
+  question_number: number | string; // 支持数字题号和中文题号（如"六"、"作文"）
   type: 'choice' | 'fill' | 'essay';
   score: number;
   max_score: number;
@@ -39,8 +39,14 @@ export interface QuestionScore {
  */
 export interface ScoreCalculationResult {
   questions: QuestionScore[];
-  objectiveScores: Record<number, { score: number; max_score: number }>;
-  subjectiveScores: Record<number, { score: number; max_score: number }>;
+  objectiveScores: Record<
+    number | string,
+    { score: number; max_score: number }
+  >; // 支持数字和字符串题号
+  subjectiveScores: Record<
+    number | string,
+    { score: number; max_score: number }
+  >; // 支持数字和字符串题号
   totalScore: number;
   totalMaxScore: number; // 试卷总分（满分）
 }
@@ -115,12 +121,13 @@ export class ScoreCalculationService {
     const scores = this.parseScoreResponse(content, blankSheetRecognition);
 
     // Calculate objective and subjective scores
+    // Support both number and string question numbers (e.g., Chinese question numbers)
     const objectiveScores: Record<
-      number,
+      number | string,
       { score: number; max_score: number }
     > = {};
     const subjectiveScores: Record<
-      number,
+      number | string,
       { score: number; max_score: number }
     > = {};
 
@@ -283,7 +290,7 @@ ${scoresText}
     try {
       const parsed = JSON.parse(jsonContent) as {
         questions?: Array<{
-          question_number: number;
+          question_number: number | string;
           type?: 'choice' | 'fill' | 'essay';
           score: number;
           max_score: number;
@@ -299,7 +306,8 @@ ${scoresText}
       const questions: QuestionScore[] = parsed.questions
         .filter((q) => {
           return (
-            typeof q.question_number === 'number' &&
+            (typeof q.question_number === 'number' ||
+              typeof q.question_number === 'string') &&
             typeof q.score === 'number' &&
             typeof q.max_score === 'number' &&
             q.score >= 0
@@ -421,12 +429,28 @@ ${scoresText}
       questionsByType.get(type)!.push(question);
     }
 
+    // Helper function to compare question numbers (supports number and string)
+    const compareQuestionNumbers = (
+      a: number | string,
+      b: number | string,
+    ): number => {
+      if (typeof a === 'number' && typeof b === 'number') {
+        return a - b;
+      }
+      // Convert to string for comparison
+      const aStr = String(a);
+      const bStr = String(b);
+      return aStr.localeCompare(bStr, undefined, { numeric: true });
+    };
+
     // Build merged regions with preserved original coordinates
     const mergedRegions: RegionAnswerResult[] = [];
 
     for (const [type, questions] of questionsByType.entries()) {
       // Sort questions by question number
-      questions.sort((a, b) => a.question_number - b.question_number);
+      questions.sort((a, b) =>
+        compareQuestionNumbers(a.question_number, b.question_number),
+      );
 
       // Use preserved region coordinates if available, otherwise use default full image
       const region: QuestionRegion = regionMap.get(type) || {
@@ -446,9 +470,9 @@ ${scoresText}
 
     // Sort regions by first question number
     mergedRegions.sort((a, b) => {
-      const qA = a.questions[0]?.question_number || 0;
-      const qB = b.questions[0]?.question_number || 0;
-      return qA - qB;
+      const qA = a.questions[0]?.question_number ?? 0;
+      const qB = b.questions[0]?.question_number ?? 0;
+      return compareQuestionNumbers(qA, qB);
     });
 
     this.logger.log(
@@ -470,13 +494,14 @@ ${scoresText}
     this.logger.log(`Merging ${results.length} score calculation results`);
 
     // Use Maps to track unique questions and scores
-    const questionMap = new Map<number, QuestionScore>();
+    // Support both number and string question numbers (e.g., Chinese question numbers)
+    const questionMap = new Map<number | string, QuestionScore>();
     const objectiveScoresMap = new Map<
-      number,
+      number | string,
       { score: number; max_score: number }
     >();
     const subjectiveScoresMap = new Map<
-      number,
+      number | string,
       { score: number; max_score: number }
     >();
 
@@ -492,47 +517,74 @@ ${scoresText}
       }
 
       // Merge objective scores (if duplicate, keep the first one)
+      // Support both number and string question numbers
       for (const [questionNumber, scores] of Object.entries(
         result.objectiveScores,
       )) {
-        const num = parseInt(questionNumber, 10);
-        if (!objectiveScoresMap.has(num)) {
-          objectiveScoresMap.set(num, scores);
+        // Try to parse as number, otherwise use as string
+        const key: number | string = /^\d+$/.test(questionNumber)
+          ? parseInt(questionNumber, 10)
+          : questionNumber;
+        if (!objectiveScoresMap.has(key)) {
+          objectiveScoresMap.set(key, scores);
         }
       }
 
       // Merge subjective scores (if duplicate, keep the first one)
+      // Support both number and string question numbers
       for (const [questionNumber, scores] of Object.entries(
         result.subjectiveScores,
       )) {
-        const num = parseInt(questionNumber, 10);
-        if (!subjectiveScoresMap.has(num)) {
-          subjectiveScoresMap.set(num, scores);
+        // Try to parse as number, otherwise use as string
+        const key: number | string = /^\d+$/.test(questionNumber)
+          ? parseInt(questionNumber, 10)
+          : questionNumber;
+        if (!subjectiveScoresMap.has(key)) {
+          subjectiveScoresMap.set(key, scores);
         }
       }
     }
 
     // Convert maps to objects
+    // Support both number and string question numbers
     const objectiveScores: Record<
-      number,
+      number | string,
       { score: number; max_score: number }
     > = {};
-    for (const [num, scores] of objectiveScoresMap.entries()) {
-      objectiveScores[num] = scores;
+    for (const [key, scores] of objectiveScoresMap.entries()) {
+      objectiveScores[key] = scores;
     }
 
     const subjectiveScores: Record<
-      number,
+      number | string,
       { score: number; max_score: number }
     > = {};
-    for (const [num, scores] of subjectiveScoresMap.entries()) {
-      subjectiveScores[num] = scores;
+    for (const [key, scores] of subjectiveScoresMap.entries()) {
+      subjectiveScores[key] = scores;
     }
 
     // Sort questions by question number
-    const questions = Array.from(questionMap.values()).sort(
-      (a, b) => a.question_number - b.question_number,
-    );
+    // Support both number and string question numbers
+    const questions = Array.from(questionMap.values()).sort((a, b) => {
+      const aNum = a.question_number;
+      const bNum = b.question_number;
+      // If both are numbers, compare numerically
+      if (typeof aNum === 'number' && typeof bNum === 'number') {
+        return aNum - bNum;
+      }
+      // If both are strings, compare lexicographically
+      if (typeof aNum === 'string' && typeof bNum === 'string') {
+        return aNum.localeCompare(bNum, 'zh-CN');
+      }
+      // Mixed types: numbers come before strings
+      if (typeof aNum === 'number' && typeof bNum === 'string') {
+        return -1;
+      }
+      if (typeof aNum === 'string' && typeof bNum === 'number') {
+        return 1;
+      }
+      return 0;
+    });
 
     // Calculate total max score from merged questions (avoid duplicate counting)
     const totalMaxScore = questions.reduce(

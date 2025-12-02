@@ -35,6 +35,26 @@ export class RecognitionService {
   }
 
   /**
+   * Recognize regions and scores from blank sheets and answers combined
+   * 统一识别：同时分析空白答题卡和答案图片，识别答题区域和各题分数、总分
+   * @param blankSheetImageUrls Blank answer sheet image URLs (can be multiple pages)
+   * @param answerImageUrls Answer image URLs (can be multiple pages)
+   * @returns Recognition result with regions and scores
+   */
+  async recognizeCombined(
+    blankSheetImageUrls: string[],
+    answerImageUrls: string[],
+  ): Promise<RecognitionResult> {
+    this.logger.log(
+      `Recognizing combined: ${blankSheetImageUrls.length} blank sheets, ${answerImageUrls.length} answer images`,
+    );
+    return this.qwenVLService.recognizeCombined(
+      blankSheetImageUrls,
+      answerImageUrls,
+    );
+  }
+
+  /**
    * Recognize answers from answer sheet image (full image, no region splitting)
    * 识别答案图片内容（整张图片，不需要区域分割）
    */

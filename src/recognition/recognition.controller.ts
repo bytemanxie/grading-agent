@@ -16,6 +16,7 @@ import { ApiTags, ApiOperation, ApiResponse, ApiBody } from '@nestjs/swagger';
 
 import { RecognizeAnswersDto } from './dto/recognize-answers.dto';
 import { RecognizeBlankSheetDto } from './dto/recognize-blank-sheet.dto';
+import { RecognizeCombinedDto } from './dto/recognize-combined.dto';
 import { RecognitionService } from './recognition.service';
 import { AnswerRecognitionResponse } from './responses/answer-recognition.response';
 import { RegionRecognitionResponse } from './responses/region-recognition.response';
@@ -102,5 +103,41 @@ export class RecognitionController {
         'Either imageUrl or imageUrls must be provided',
       );
     }
+  }
+
+  @Post('combined')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Recognize regions and scores from blank sheets and answers combined',
+    description:
+      '统一识别：同时分析空白答题卡和答案图片，识别答题区域和各题分数、总分。支持多张空白答题卡和多张答案图片。',
+  })
+  @ApiBody({ type: RecognizeCombinedDto })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Regions and scores recognized successfully from combined images',
+    type: RegionRecognitionResponse,
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid request or image size exceeds 10MB limit',
+  })
+  @ApiResponse({
+    status: 500,
+    description: 'Internal server error',
+  })
+  async recognizeCombined(
+    @Body() dto: RecognizeCombinedDto,
+  ): Promise<RegionRecognitionResponse> {
+    this.logger.log(
+      `Recognize combined request: ${dto.blankSheetImageUrls.length} blank sheets, ${dto.answerImageUrls.length} answer images`,
+    );
+    const result = await this.recognitionService.recognizeCombined(
+      dto.blankSheetImageUrls,
+      dto.answerImageUrls,
+    );
+    return result;
   }
 }

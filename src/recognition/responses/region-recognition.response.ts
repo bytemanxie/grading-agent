@@ -7,6 +7,8 @@ import { ApiProperty } from '@nestjs/swagger';
 
 import { QuestionRegion, QuestionScore } from '../../common/types/region';
 
+import { AnswerRecognitionResponse } from './answer-recognition.response';
+
 export class QuestionRegionResponse implements QuestionRegion {
   @ApiProperty({ description: 'Question type', example: 'choice' })
   type: 'choice' | 'essay';
@@ -38,10 +40,12 @@ export class QuestionRegionResponse implements QuestionRegion {
 
 export class QuestionScoreResponse implements QuestionScore {
   @ApiProperty({
-    description: 'Question number',
+    description:
+      'Question number (can be a number like 1, 2, 3 or a string like "六", "作文", "第一题")',
     example: 1,
+    oneOf: [{ type: 'number' }, { type: 'string' }],
   })
-  questionNumber: number;
+  questionNumber: number | string;
 
   @ApiProperty({
     description: 'Score value',
@@ -62,4 +66,11 @@ export class RegionRecognitionResponse {
     type: [QuestionScoreResponse],
   })
   scores: QuestionScoreResponse[];
+
+  @ApiProperty({
+    description: 'Standard answers (priority: blank sheet > answer images)',
+    type: AnswerRecognitionResponse,
+    required: false,
+  })
+  answers?: AnswerRecognitionResponse;
 }

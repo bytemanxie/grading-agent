@@ -101,12 +101,12 @@ export class GradingService {
    * Extract answer by question number from answer recognition result
    * 从答案识别结果中提取指定题号的答案
    * @param answerRecognition Answer recognition result
-   * @param questionNumber Question number
+   * @param questionNumber Question number (can be number or string for Chinese question numbers)
    * @returns Answer string or undefined if not found
    */
   private extractAnswerByQuestionNumber(
     answerRecognition: AnswerRecognitionResponse,
-    questionNumber: number,
+    questionNumber: number | string,
   ): string | undefined {
     for (const region of answerRecognition.regions) {
       for (const question of region.questions) {

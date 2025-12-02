@@ -39,14 +39,18 @@ export interface QuestionRegion {
 export interface QuestionScore {
   /**
    * Question number (题号)
+   * Can be a number (1, 2, 3) or a string (e.g., "六", "作文", "第一题", "4(1)", "4(2)")
+   * Supports sub-question format like "4(1)", "4(2)" for questions with sub-items
    */
-  questionNumber: number;
+  questionNumber: number | string;
 
   /**
    * Score value (分值)
    */
   score: number;
 }
+
+import type { AnswerRecognitionResponse } from './answer';
 
 /**
  * Recognition result containing all detected regions and scores
@@ -61,4 +65,10 @@ export interface RecognitionResult {
    * Array of question scores (每道题的分数)
    */
   scores: QuestionScore[];
+
+  /**
+   * Standard answers (标准答案) - optional
+   * Priority: blank sheet > answer images (for reference)
+   */
+  answers?: AnswerRecognitionResponse;
 }

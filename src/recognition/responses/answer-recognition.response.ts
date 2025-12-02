@@ -9,8 +9,13 @@ import { QuestionAnswer } from '../../common/types/answer';
 import { QuestionRegion } from '../../common/types/region';
 
 export class QuestionAnswerResponse implements QuestionAnswer {
-  @ApiProperty({ description: 'Question number', example: 1 })
-  question_number: number;
+  @ApiProperty({
+    description:
+      'Question number. Can be a number (1, 2, 3) or a string for sub-questions (e.g., "13(1)", "13(2)")',
+    example: 1,
+    oneOf: [{ type: 'number' }, { type: 'string' }],
+  })
+  question_number: number | string;
 
   @ApiProperty({ description: 'Answer content', example: 'A' })
   answer: string;

@@ -39,7 +39,7 @@ export class AnswerRecognitionService {
         baseURL,
       },
       temperature: 0.1,
-      maxTokens: 4096,
+      maxTokens: 8192, // Increased to support full standard answers including long essay questions
     });
   }
 
@@ -405,7 +405,7 @@ JSON 格式：
       // Try new format first: { questions: [{ question_number, type, answer }] }
       const parsed = JSON.parse(jsonContent) as {
         questions?: Array<{
-          question_number: number;
+          question_number: number | string;
           type?: QuestionType;
           answer: string;
         }>;
@@ -413,6 +413,20 @@ JSON 格式：
           type: QuestionType;
           questions: QuestionAnswer[];
         }>;
+      };
+
+      // Helper function to compare question numbers (supports number and string)
+      const compareQuestionNumbers = (
+        a: number | string,
+        b: number | string,
+      ): number => {
+        if (typeof a === 'number' && typeof b === 'number') {
+          return a - b;
+        }
+        // Convert to string for comparison
+        const aStr = String(a);
+        const bStr = String(b);
+        return aStr.localeCompare(bStr, undefined, { numeric: true });
       };
 
       // Support both new format (questions array) and legacy format (regions array)
@@ -423,7 +437,8 @@ JSON 格式：
         parsed.questions.forEach((q) => {
           // Validate question
           if (
-            typeof q.question_number !== 'number' ||
+            (typeof q.question_number !== 'number' &&
+              typeof q.question_number !== 'string') ||
             typeof q.answer !== 'string'
           ) {
             return;
@@ -458,14 +473,13 @@ JSON 格式：
           type,
           region: {
             type,
-            question_number: 1,
             x_min_percent: 0,
             y_min_percent: 0,
             x_max_percent: 100,
             y_max_percent: 100,
           },
-          questions: questions.sort(
-            (a, b) => a.question_number - b.question_number,
+          questions: questions.sort((a, b) =>
+            compareQuestionNumbers(a.question_number, b.question_number),
           ),
         }));
 
@@ -486,7 +500,6 @@ JSON 格式：
               type: region.type,
               region: {
                 type: region.type,
-                question_number: 1,
                 x_min_percent: 0,
                 y_min_percent: 0,
                 x_max_percent: 100,
@@ -673,8 +686,12 @@ JSON 格式：
 
     const q = question as Record<string, unknown>;
 
-    // Check required fields
-    if (typeof q.question_number !== 'number' || typeof q.answer !== 'string') {
+    // Check required fields - question_number can be number or string
+    if (
+      (typeof q.question_number !== 'number' &&
+        typeof q.question_number !== 'string') ||
+      typeof q.answer !== 'string'
+    ) {
       return false;
     }
 

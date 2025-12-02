@@ -13,8 +13,10 @@ export interface QuestionAnswer {
   /**
    * Question number
    * 题目编号
+   * Can be a number (1, 2, 3) or a string for sub-questions (e.g., "13(1)", "13(2)", "21(1)", "21(2)")
+   * Supports sub-question format like "13(1)", "13(2)" for questions with sub-items
    */
-  question_number: number;
+  question_number: number | string;
 
   /**
    * Answer content
