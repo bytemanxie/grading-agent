@@ -5,7 +5,6 @@
 
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import pLimit from 'p-limit';
 
 import type { AnswerRecognitionResponse } from '../common/types/answer';
 import type { RecognitionResult } from '../common/types/region';
@@ -33,6 +32,34 @@ export class GradingService {
   ) {}
 
   /**
+   * Process tasks with concurrency limit
+   * 并发控制处理任务
+   */
+  private async processWithConcurrencyLimit<T>(
+    tasks: Array<() => Promise<T>>,
+    limit: number,
+  ): Promise<T[]> {
+    const results: T[] = [];
+    const executing: Promise<void>[] = [];
+
+    for (const task of tasks) {
+      const promise = task().then((result) => {
+        results.push(result);
+        executing.splice(executing.indexOf(promise), 1);
+      });
+
+      executing.push(promise);
+
+      if (executing.length >= limit) {
+        await Promise.race(executing);
+      }
+    }
+
+    await Promise.all(executing);
+    return results;
+  }
+
+  /**
    * Grade a batch of sheets
    * 批量批改卷子
    * @param dto Batch grading request DTO
@@ -45,48 +72,45 @@ export class GradingService {
     const maxConcurrent =
       this.configService.get<number>('grading.maxConcurrent') || 5;
 
-    // Create concurrency limiter
-    const limit = pLimit(maxConcurrent);
     this.logger.log(`Using concurrency limit: ${maxConcurrent}`);
 
     // Process all sheets with concurrency control
-    const tasks = dto.sheets.map((sheet) =>
-      limit(async () => {
+    const tasks = dto.sheets.map((sheet) => async () => {
+      try {
+        await this.gradeSheet(
+          sheet.gradingSheetId,
+          sheet.studentSheetImageUrls,
+          dto.blankSheetRecognition,
+          dto.answerRecognition,
+          dto.callbackUrl,
+        );
+      } catch (error) {
+        this.logger.error(
+          `Failed to grade sheet ${sheet.gradingSheetId}`,
+          error instanceof Error ? error.message : String(error),
+        );
+        // Send failure callback (non-blocking: don't fail batch if callback fails)
         try {
-          await this.gradeSheet(
-            sheet.gradingSheetId,
-            sheet.studentSheetImageUrls,
-            dto.blankSheetRecognition,
-            dto.answerRecognition,
-            dto.callbackUrl,
+          await this.callbackService.sendCallback(dto.callbackUrl, {
+            gradingSheetId: sheet.gradingSheetId,
+            status: 'failed',
+            failureReason:
+              error instanceof Error ? error.message : 'Unknown error',
+          });
+        } catch (callbackError) {
+          this.logger.warn(
+            `Failed to send failure callback for sheet ${sheet.gradingSheetId}`,
+            callbackError instanceof Error
+              ? callbackError.message
+              : String(callbackError),
           );
-        } catch (error) {
-          this.logger.error(
-            `Failed to grade sheet ${sheet.gradingSheetId}`,
-            error instanceof Error ? error.message : String(error),
-          );
-          // Send failure callback (non-blocking: don't fail batch if callback fails)
-          try {
-            await this.callbackService.sendCallback(dto.callbackUrl, {
-              gradingSheetId: sheet.gradingSheetId,
-              status: 'failed',
-              failureReason:
-                error instanceof Error ? error.message : 'Unknown error',
-            });
-          } catch (callbackError) {
-            this.logger.warn(
-              `Failed to send failure callback for sheet ${sheet.gradingSheetId}`,
-              callbackError instanceof Error
-                ? callbackError.message
-                : String(callbackError),
-            );
-          }
         }
-      }),
-    );
+        throw error; // Re-throw to mark task as failed
+      }
+    });
 
-    // Wait for all tasks to complete
-    await Promise.all(tasks);
+    // Process tasks with concurrency limit
+    await this.processWithConcurrencyLimit(tasks, maxConcurrent);
 
     this.logger.log(`Batch grading completed for ${dto.sheets.length} sheets`);
 

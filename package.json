@@ -17,7 +17,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
-    "start:ts": "tsx src/main.ts",
+    "start:ts": "nest start",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "prepare": "husky",
@@ -52,7 +52,6 @@
     "class-validator": "^0.14.1",
     "dotenv": "^16.4.7",
     "langchain": "^0.3.35",
-    "p-limit": "^7.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sharp": "^0.33.5"

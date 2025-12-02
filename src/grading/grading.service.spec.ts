@@ -13,12 +13,7 @@ import configuration from '../config/configuration';
 import type { GradeBatchDto } from './dto/grade-batch.dto';
 import { GradingModule } from './grading.module';
 import { GradingService } from './grading.service';
-// Mock p-limit before importing GradingService to avoid ES module issues
-jest.mock('p-limit', () => {
-  return jest.fn((_concurrency: number) => {
-    return (fn: () => Promise<any>) => fn();
-  });
-});
+
 describe('GradingService Integration Test', () => {
   let service: GradingService;
   let module: TestingModule;

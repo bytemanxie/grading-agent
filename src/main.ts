@@ -1,7 +1,7 @@
 /**
  * Application entry point
  * 应用入口
- * Updated: Trigger deployment test
+ * Updated: Switch to ES Module mode
  */
 
 import 'reflect-metadata';
