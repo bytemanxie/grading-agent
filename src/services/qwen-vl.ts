@@ -100,28 +100,23 @@ export class QwenVLService {
    * Build prompt for region recognition
    */
   private buildPrompt(): string {
-    return `请分析这张空白答题卡图片，识别出答题区域和每道题的分数：
+    return `请分析这张空白答题卡图片，识别出选择题区域和每道题的分数：
 
 1. **选择题区域**（choice）：精确识别所有选择题，合并为一个区域（可选）
    - 如果试卷中有选择题，精确识别选择题的边界，确保包含所有选择题
    - 只返回一个 choice 区域，覆盖所有选择题的范围
    - 边界要精确，不要遗漏任何选择题
-   - **如果试卷中没有选择题，可以不返回此类型区域**
+   - **如果试卷中没有选择题，regions 数组可以为空**
 
-2. **其他答题区域**（essay）：按照有分数字段的题目进行识别
-   - 根据试卷上标注了分值的题目来识别答题区域
-   - 每个有分数字段的题目对应一个 essay 区域
-   - 确保覆盖所有有分数字段的题目区域
-
-3. **分数信息**（scores）：识别试卷上每道题的题号和分值
+2. **分数信息**（scores）：识别试卷上每道题的题号和分值
    - 从试卷图片上标注的分数中提取
    - 返回题号和对应的分值
    - 必须识别所有题目的分数
 
 重要要求：
-- 如果试卷中有选择题，选择题区域要精确识别，只返回一个区域；如果没有选择题，可以不返回choice类型
-- 其他区域按照有分数字段的题目进行识别，每个有分数字段的题目对应一个essay区域
-- 分数信息单独返回为一个数组
+- 只识别选择题区域，其他区域暂时不需要识别
+- 如果试卷中有选择题，选择题区域要精确识别，只返回一个区域；如果没有选择题，regions 数组可以为空数组
+- 分数信息单独返回为一个数组，必须包含所有题目的分数
 - 坐标必须是百分比形式（0-100），相对于整个图片的尺寸
 - 必须直接返回有效的 JSON 格式，不要使用 markdown 代码块
 
@@ -134,13 +129,6 @@ JSON 格式（有选择题的情况）：
       "y_min_percent": 10.0,
       "x_max_percent": 95.0,
       "y_max_percent": 35.0
-    },
-    {
-      "type": "essay",
-      "x_min_percent": 5.0,
-      "y_min_percent": 40.0,
-      "x_max_percent": 95.0,
-      "y_max_percent": 95.0
     }
   ],
   "scores": [
@@ -153,15 +141,7 @@ JSON 格式（有选择题的情况）：
 
 JSON 格式（没有选择题的情况）：
 {
-  "regions": [
-    {
-      "type": "essay",
-      "x_min_percent": 5.0,
-      "y_min_percent": 10.0,
-      "x_max_percent": 95.0,
-      "y_max_percent": 95.0
-    }
-  ],
+  "regions": [],
   "scores": [
     {"questionNumber": 1, "score": 10},
     {"questionNumber": 2, "score": 15}
@@ -188,27 +168,28 @@ JSON 格式（没有选择题的情况）：
     try {
       const parsed = JSON.parse(jsonContent) as RecognitionResult;
 
-      // Validate structure
-      if (!parsed.regions || !Array.isArray(parsed.regions)) {
-        throw new Error('Invalid response format: missing regions array');
-      }
+      // Validate structure - allow empty arrays
+      const regions = Array.isArray(parsed.regions) ? parsed.regions : [];
+      const scores = Array.isArray(parsed.scores) ? parsed.scores : [];
 
-      if (!parsed.scores || !Array.isArray(parsed.scores)) {
-        throw new Error('Invalid response format: missing scores array');
-      }
-
-      // Validate and filter regions
-      const validRegions: QuestionRegion[] = parsed.regions.filter((region) => {
+      // Validate and filter regions - allow empty result
+      const validRegions: QuestionRegion[] = regions.filter((region) => {
         return this.validateRegion(region);
       });
 
-      // Validate and filter scores
-      const validScores = parsed.scores.filter((score) => {
+      if (validRegions.length === 0) {
+        console.log(
+          'No valid regions found in response, returning empty array',
+        );
+      }
+
+      // Validate and filter scores - allow empty result
+      const validScores = scores.filter((score) => {
         return this.validateScore(score);
       });
 
       if (validScores.length === 0) {
-        console.warn('No valid scores found in response');
+        console.log('No valid scores found in response, returning empty array');
       }
 
       return {
