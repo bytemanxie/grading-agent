@@ -50,9 +50,6 @@ jobs:
             echo ">>> 安装依赖..."
             pnpm install
 
-            echo ">>> 开始构建..."
-            pnpm build
-
             echo ">>> 使用 PM2 管理应用进程..."
             # 检查应用是否已在运行
             if pm2 list | grep -q "grading-agent"; then
@@ -62,8 +59,8 @@ jobs:
               echo ">>> 未发现运行中的进程"
             fi
 
-            echo ">>> 启动新的应用进程..."
-            pm2 start pnpm --name "grading-agent" -- start:prod
+            echo ">>> 启动新的应用进程（直接运行 TypeScript 源码）..."
+            pm2 start pnpm --name "grading-agent" -- start:ts
 
             echo ">>> 保存 PM2 进程列表..."
             pm2 save

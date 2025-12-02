@@ -17,6 +17,7 @@
     "dev": "nest start --watch",
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
+    "start:ts": "tsx src/main.ts",
     "format": "prettier --write \"**/*.{ts,tsx,json,md}\"",
     "lint": "eslint \"src/**/*.{ts,tsx}\" --fix",
     "prepare": "husky",
